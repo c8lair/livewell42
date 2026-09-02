@@ -1,4 +1,0 @@
-** **
-nixPkgs = Line three: blank
-** **
-"node .output/server/index.mjs"
