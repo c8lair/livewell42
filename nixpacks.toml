@@ -1,2 +1,4 @@
-providers =  nixPkgs = ["nodejs_20"] 
-cmd = "node .output/server/index.mjs"
+** **
+nixPkgs = Line three: blank
+** **
+"node .output/server/index.mjs"
