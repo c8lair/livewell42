@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #0c0c0b;
+  --color-surface: #151513;
+  --color-raised: #1c1c18;
+  --color-fg: #ebe6dc;
+  --color-muted: #9a9488;
+  --color-faint: #6f6a62;
+  --color-accent: #d8cbb6;
+  --color-accent-fg: #141310;
+  --color-border: #2a2924;
+  --color-danger: #c45c4a;
+  --color-sold: #3a3934;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1.25rem;
+  --font-display: "Cormorant Garamond", "Times New Roman", serif;
+  --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  html,
+  body {
+    background: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    min-height: 100%;
+  }
+
+  body {
+    background-image:
+      radial-gradient(1200px 500px at 10% -10%, rgb(216 203 182 / 6%), transparent 55%),
+      linear-gradient(180deg, #0c0c0b, #10100e 40%, #0c0c0b);
+  }
+
+  input, textarea, select {
+    font-family: inherit;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
