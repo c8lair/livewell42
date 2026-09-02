@@ -1,0 +1,1 @@
+providers =  nixPkgs =  cmd = "node .output/server
