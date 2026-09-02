@@ -1,1 +1,2 @@
-providers =  nixPkgs =  cmd = "node .output/server
+providers =  nixPkgs = ["nodejs_20"] 
+cmd = "node .output/server/index.mjs"
