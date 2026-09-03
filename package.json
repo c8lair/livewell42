@@ -4,7 +4,8 @@
   "sideEffects": false,
   "type": "module",
   "overrides": {
-    "nf3": "0.3.17"
+    "nf3": "0.3.17",
+    "zod": "4.4.3"
   },
   "scripts": {
     "build": "node ./node_modules/vite/dist/node/cli.js build",
@@ -58,6 +59,6 @@
     "tailwindcss": "^4.2.2",
     "typescript": "^5.7.2",
     "vite": "^8.0.14",
-    "zod": "^4.5.4"
+    "zod": "4.4.3"
   }
 }
