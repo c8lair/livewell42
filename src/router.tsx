@@ -1,7 +1,15 @@
-import { createRouter } from "@tanstack/react-router";
-import { AppErrorComponent } from "@/lib/error-component";
-import { routeTree } from "./routeTree.gen";
+import { createRouter as createTanStackRouter } from '@tanstack/react-router'
+import { routeTree } from './routeTree.gen'
 
-export function getRouter() {
-  return createRouter({ routeTree, defaultErrorComponent: AppErrorComponent });
+export function createRouter() {
+  return createTanStackRouter({
+    routeTree,
+    scrollRestoration: true,
+  })
+}
+
+declare module '@tanstack/react-router' {
+  interface Register {
+    router: ReturnType<typeof createRouter>
+  }
 }
