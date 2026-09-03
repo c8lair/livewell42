@@ -14,6 +14,7 @@ function Signup() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [created, setCreated] = useState(false);
 
@@ -78,7 +79,7 @@ function Signup() {
           <div>
             <Label>Password</Label>
             <Input
-              type="password"
+              type={showPassword ? "text" : "password"}
               autoComplete="new-password"
               required
               minLength={8}
@@ -89,13 +90,20 @@ function Signup() {
           <div>
             <Label>Confirm password</Label>
             <Input
-              type="password"
+              type={showPassword ? "text" : "password"}
               autoComplete="new-password"
               required
               minLength={8}
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
             />
+            <button
+              type="button"
+              className="mt-1 text-xs text-muted underline-offset-4 hover:underline"
+              onClick={() => setShowPassword((v) => !v)}
+            >
+              {showPassword ? "Hide passwords" : "Show passwords"}
+            </button>
           </div>
           <Button type="submit" className="w-full" disabled={busy}>
             {busy ? "Creating…" : "Create account"}
