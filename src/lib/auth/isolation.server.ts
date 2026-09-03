@@ -1,4 +1,4 @@
-import { getRequest } from "@tanstack/react-start/server";
+import { getWebRequest } from "@tanstack/react-start/server";
 
 /**
  * Fetch-Metadata sibling isolation — **server-only** (`.server.ts` suffix).
@@ -32,7 +32,7 @@ export class CrossSiteRequestError extends Error {
 
 /** Throw `CrossSiteRequestError` for a scripted cross-site/sibling request. */
 export function assertSameSiteRequest(): void {
-  const request = getRequest();
+  const request = getWebRequest()
   if (!request) return; // no request context (e.g. build) — nothing to guard
   const h = request.headers;
   const site = h.get("sec-fetch-site");
