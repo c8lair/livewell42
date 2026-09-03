@@ -116,11 +116,15 @@ const baseURL = explicitBaseURL ?? {
 // Origins Better Auth accepts on credentialed POSTs (sign-up/sign-in, etc.).
 // Missing entries here surface as FORBIDDEN "Invalid origin".
 const trustedOrigins: string[] = explicitBaseURL
-  ? [explicitBaseURL, "https://livewell42.com", ...LOCAL_DEV_ORIGINS]
+  ? [
+      explicitBaseURL,
+      "https://livewell42.com",
+      "https://www.livewell42.com",
+      "https://livewell42-production-6a66.up.railway.app",
+      ...LOCAL_DEV_ORIGINS,
+    ]
   : [
-      // Host wildcards (matched against Origin's host)
       ...previewAllowedHosts,
-      // Full-origin wildcards (matched against Origin)
       ...previewAllowedHosts.flatMap((host) => [`https://${host}`, `http://${host}`]),
       ...LOCAL_DEV_ORIGINS,
     ];
