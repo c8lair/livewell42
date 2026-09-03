@@ -167,6 +167,8 @@ export default defineConfig(({ command, isPreview }) => ({
     grokPwaPlugin(),
     tailwindcss(),
     tanstackStart(),
+    nitro({  inlineDynamicImports: true,
+    }),
     viteReact(),
   ],
 }));
