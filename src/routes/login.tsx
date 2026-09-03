@@ -96,7 +96,7 @@ function Login() {
             />
             <button
               type="button"
-              className="mt-1 text-xs text-muted underline-offset-4 hover:underline"
+              className="mt-1 text-xs text-gray-400 underline-offset-4 hover:underline"
               onClick={() => setShowPassword((v) => !v)}
             >
               {showPassword ? "Hide password" : "Show password"}
