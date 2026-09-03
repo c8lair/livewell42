@@ -1,8 +1,8 @@
 FROM node:20-alpine
 WORKDIR /app
 COPY package.json .
-RUN npm install --include=dev
+ENV NODE_ENV=development
 COPY . .
-RUN npm install
+RUN npm install .
 EXPOSE 3000
 CMD ["node", ".output/server/index.mjs"]
