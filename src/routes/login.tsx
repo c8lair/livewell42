@@ -14,6 +14,7 @@ function Login() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [over21, setOver21] = useState(false);
   const [research, setResearch] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -87,12 +88,19 @@ function Login() {
           <div>
             <Label>Password</Label>
             <Input
-              type="password"
+              type={showPassword ? "text" : "password"}
               autoComplete="current-password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
+            <button
+              type="button"
+              className="mt-1 text-xs text-muted underline-offset-4 hover:underline"
+              onClick={() => setShowPassword((v) => !v)}
+            >
+              {showPassword ? "Hide password" : "Show password"}
+            </button>
           </div>
 
           <div className="space-y-1 rounded-lg border border-border bg-surface px-3 py-2">
