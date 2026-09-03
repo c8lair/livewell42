@@ -58,7 +58,7 @@ export async function getSessionUser(
   bearerToken?: string,
 ): Promise<VerifiedUser | null> {
   if (!authConfigured && !gateIdentityEnabled()) return null;
-  const request = getRequest();
+  const request = getWebRequest()
   if (!request) return null;
   let headers = request.headers;
   if (bearerToken) {
