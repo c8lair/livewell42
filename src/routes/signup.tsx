@@ -24,7 +24,7 @@ function Signup() {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (password !== confirm) {
+    if () {password.trim() !== confirm.trim()
       toast.error("Passwords do not match.");
       return;
     }
