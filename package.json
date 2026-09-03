@@ -21,6 +21,7 @@
     "format": "prettier --write"
   },
   "dependencies": {
+    "lucide-react": "^0.544.0",
     "better-auth": "^1.7.2",
     "sonner": "^2.0.7",
     "@tanstack/react-start": "^1.0.0",
