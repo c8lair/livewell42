@@ -340,6 +340,31 @@ async function requireAdmin(userId: string) {
   return me;
 }
 
+/** One-time repair: signed-in owner email (or known operator Gmail) becomes admin. */
+export const repairOwnerAdmin = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const { getSessionUser } = await import("@/lib/auth/verify.server");
+    const session = await getSessionUser();
+    const email = (session?.email ?? "").trim().toLowerCase();
+    if (!email) throw new Error("Sign in first.");
+
+    const settings = await loadSettings();
+    const owner = (settings.owner_email || "").trim().toLowerCase();
+    const knownOperator = "c8lair@gmail.com";
+    if (email !== owner && email !== knownOperator) {
+      throw new Error("Only the owner email can repair operator access.");
+    }
+
+    await ensureProfile(context.userId, email);
+    const sql = await getSql();
+    await sql`update profiles set is_admin = true, email = ${email} where user_id = ${context.userId}`;
+    if (!owner) {
+      await sql`update store_settings set owner_email = ${email} where id = 1`;
+    }
+    return { ok: true as const };
+  });
+
 export const adminGet = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {

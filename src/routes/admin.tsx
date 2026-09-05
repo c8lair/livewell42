@@ -8,6 +8,7 @@ import {
   adminSaveSettings,
   adminSalesCsv,
   adminUpdateOrder,
+  repairOwnerAdmin,
   type Product,
 } from "@/lib/store";
 import { cents } from "@/lib/money";
@@ -41,9 +42,27 @@ function AdminPage() {
     return (
       <main className="mx-auto max-w-md px-6 py-20 text-center">
         <p className="text-muted">This desk is for the operator only.</p>
-        <Link to="/" className="mt-4 inline-block text-accent">
-          Back
-        </Link>
+        <div className="mt-6 flex flex-col items-center gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              void repairOwnerAdmin()
+                .then(() => {
+                  toast.success("Operator access restored");
+                  void refresh();
+                })
+                .catch((err) => {
+                  toast.error(err instanceof Error ? err.message : "Could not repair access.");
+                });
+            }}
+          >
+            Repair operator access
+          </Button>
+          <Link to={user ? "/" : "/login"} className="inline-block text-accent">
+            Back
+          </Link>
+        </div>
       </main>
     );
   }
@@ -380,30 +399,48 @@ function SettingsBlock({
         <Label>USDC customer-pay address</Label>
         <Input value={usdcPay} onChange={(e) => setUsdcPay(e.target.value)} />
       </div>
-      <Button
-        onClick={async () => {
-          await adminSaveSettings({
-            data: {
-              storeName,
-              supportEmail,
-              ownerEmail,
-              shippingDollars: ship,
-              freeAtDollars: freeAt,
-              nexapayApiKey: nexapay,
-              usdcWallet: usdc,
-              usdtTronWallet: tron,
-              btcWallet: btc,
-              usdcPayWallet: usdcPay,
-              bannerEnabled,
-              bannerText,
-            },
-          });
-          toast.success("Settings saved");
-          onSave();
-        }}
-      >
-        Save settings
-      </Button>
+      <div className="flex flex-wrap gap-3">
+        <Button
+          onClick={async () => {
+            await adminSaveSettings({
+              data: {
+                storeName,
+                supportEmail,
+                ownerEmail,
+                shippingDollars: ship,
+                freeAtDollars: freeAt,
+                nexapayApiKey: nexapay,
+                usdcWallet: usdc,
+                usdtTronWallet: tron,
+                btcWallet: btc,
+                usdcPayWallet: usdcPay,
+                bannerEnabled,
+                bannerText,
+              },
+            });
+            toast.success("Settings saved");
+            onSave();
+          }}
+        >
+          Save settings
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => {
+            void repairOwnerAdmin()
+              .then(() => {
+                toast.success("Operator access confirmed for this account");
+                onSave();
+              })
+              .catch((err) => {
+                toast.error(err instanceof Error ? err.message : "Could not repair access.");
+              });
+          }}
+        >
+          Repair operator access
+        </Button>
+      </div>
     </section>
   );
 }

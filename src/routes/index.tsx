@@ -62,21 +62,42 @@ function MemberApp() {
   const [settings, setSettings] = useState<PublicSettings | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   async function refresh() {
     const data = await getBootstrap();
     setMe(data.me);
     setSettings(data.settings);
     setProducts(data.products);
+    setLoadError(null);
     setLoading(false);
   }
 
   useEffect(() => {
-    void refresh().catch(() => setLoading(false));
+    void refresh().catch((err) => {
+      setLoading(false);
+      setLoadError(err instanceof Error ? err.message : "Could not load the shop.");
+    });
   }, []);
 
-  if (loading || !me || !settings) {
+  if (loading) {
     return <div className="min-h-dvh bg-bg" />;
+  }
+
+  if (loadError || !me || !settings) {
+    return (
+      <main className="mx-auto flex min-h-dvh max-w-lg flex-col justify-center px-6 py-16">
+        <p className="text-sm leading-relaxed text-muted">
+          {loadError || "Could not load the shop."}
+        </p>
+        <Link
+          to="/login"
+          className="mt-8 inline-flex h-11 items-center justify-center rounded-md bg-accent px-6 text-sm font-medium text-accent-fg"
+        >
+          Sign in
+        </Link>
+      </main>
+    );
   }
 
   const inShop =
