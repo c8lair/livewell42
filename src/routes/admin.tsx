@@ -315,6 +315,8 @@ function SettingsBlock({
   const [tron, setTron] = useState(settings.usdt_tron_wallet);
   const [btc, setBtc] = useState(settings.btc_wallet);
   const [usdcPay, setUsdcPay] = useState(settings.usdc_pay_wallet);
+  const [bannerEnabled, setBannerEnabled] = useState(Boolean(settings.banner_enabled));
+  const [bannerText, setBannerText] = useState(settings.banner_text ?? "");
 
   return (
     <section className="mt-10 space-y-3">
@@ -322,6 +324,23 @@ function SettingsBlock({
       <div>
         <Label>Store name</Label>
         <Input value={storeName} onChange={(e) => setStoreName(e.target.value)} />
+      </div>
+      <label className="flex items-center gap-2 text-sm text-muted">
+        <input
+          type="checkbox"
+          checked={bannerEnabled}
+          onChange={(e) => setBannerEnabled(e.target.checked)}
+        />
+        Show banner
+      </label>
+      <div>
+        <Label>Announcement</Label>
+        <Input
+          value={bannerText}
+          maxLength={280}
+          onChange={(e) => setBannerText(e.target.value)}
+          placeholder="Shown at the top of the shop when enabled"
+        />
       </div>
       <div>
         <Label>Support email (shown to members)</Label>
@@ -375,6 +394,8 @@ function SettingsBlock({
               usdtTronWallet: tron,
               btcWallet: btc,
               usdcPayWallet: usdcPay,
+              bannerEnabled,
+              bannerText,
             },
           });
           toast.success("Settings saved");

@@ -27,6 +27,8 @@ export type PublicSettings = {
   btcWallet: string;
   usdcPayWallet: string;
   nexapayConfigured: boolean;
+  bannerEnabled: boolean;
+  bannerText: string;
 };
 
 export type Me = {
@@ -61,6 +63,8 @@ type SettingsRow = {
   usdt_tron_wallet: string;
   btc_wallet: string;
   usdc_pay_wallet: string;
+  banner_enabled: boolean;
+  banner_text: string;
 };
 
 function mapProduct(r: ProductRow): Product {
@@ -119,7 +123,7 @@ async function ensureProfile(
 
 async function loadSettings(): Promise<SettingsRow> {
   const sql = await getSql();
-  const rows = await sql<SettingsRow>`select store_name, support_email, owner_email, shipping_cents, free_shipping_at_cents, nexapay_api_key, usdc_wallet, usdt_tron_wallet, btc_wallet, usdc_pay_wallet from store_settings where id = 1`;
+  const rows = await sql<SettingsRow>`select store_name, support_email, owner_email, shipping_cents, free_shipping_at_cents, nexapay_api_key, usdc_wallet, usdt_tron_wallet, btc_wallet, usdc_pay_wallet, banner_enabled, banner_text from store_settings where id = 1`;
   const r = rows[0];
   if (!r) {
     await sql`insert into store_settings (id, store_name) values (1, 'Livewell42') on conflict (id) do nothing`;
@@ -134,6 +138,8 @@ async function loadSettings(): Promise<SettingsRow> {
       usdt_tron_wallet: "",
       btc_wallet: "",
       usdc_pay_wallet: "",
+      banner_enabled: false,
+      banner_text: "",
     };
   }
   if (r.store_name === "Alder") {
@@ -154,6 +160,8 @@ function publicize(s: SettingsRow): PublicSettings {
     btcWallet: s.btc_wallet,
     usdcPayWallet: s.usdc_pay_wallet,
     nexapayConfigured: Boolean(s.nexapay_api_key),
+    bannerEnabled: Boolean(s.banner_enabled),
+    bannerText: s.banner_text ?? "",
   };
 }
 
@@ -437,6 +445,8 @@ export const adminSaveSettings = createServerFn({ method: "POST" })
       usdtTronWallet: z.string().trim().max(200),
       btcWallet: z.string().trim().max(200),
       usdcPayWallet: z.string().trim().max(200),
+      bannerEnabled: z.boolean(),
+      bannerText: z.string().trim().max(280),
     }),
   )
   .middleware([authMiddleware])
@@ -455,7 +465,9 @@ export const adminSaveSettings = createServerFn({ method: "POST" })
       usdc_wallet = ${data.usdcWallet},
       usdt_tron_wallet = ${data.usdtTronWallet},
       btc_wallet = ${data.btcWallet},
-      usdc_pay_wallet = ${data.usdcPayWallet}
+      usdc_pay_wallet = ${data.usdcPayWallet},
+      banner_enabled = ${data.bannerEnabled},
+      banner_text = ${data.bannerText}
       where id = 1`;
     return { ok: true };
   });

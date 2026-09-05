@@ -79,8 +79,18 @@ function MemberApp() {
     return <div className="min-h-dvh bg-bg" />;
   }
 
+  const inShop =
+    Boolean(me.legalAcceptedAt) && (me.member || me.isAdmin);
+  const showBanner =
+    inShop && settings.bannerEnabled && settings.bannerText.trim().length > 0;
+
   return (
     <div className="min-h-dvh pb-40">
+      {showBanner ? (
+        <div className="border-b border-border bg-raised px-5 py-3 text-center text-sm leading-relaxed text-fg">
+          <p className="mx-auto max-w-3xl">{settings.bannerText.trim()}</p>
+        </div>
+      ) : null}
       <header className="mx-auto flex max-w-3xl items-center justify-between px-5 py-5">
         <div>
           <p className="font-display text-xl tracking-tight">{settings.storeName}</p>
