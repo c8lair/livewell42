@@ -357,7 +357,11 @@ function ProductGroup({
                 </p>
                 <p className="mt-0.5 flex flex-wrap items-center gap-x-3 text-sm text-muted">
                   <span>{cents(p.priceCents)}</span>
-                  {sold ? <span>Sold out</span> : <span>{p.stock} in stock</span>}
+                  {sold ? (
+                    <span>Sold out</span>
+                  ) : p.stock < 5 ? (
+                    <span className="text-yellow-400">{p.stock} in stock</span>
+                  ) : null}
                   {p.coaUrl ? (
                     <a
                       href={p.coaUrl}
