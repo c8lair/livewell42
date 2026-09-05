@@ -20,7 +20,7 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/")({ component: Home });
 
-type Rail = "card" | "usdt_tron" | "btc" | "usdc";
+type Rail = "card" | "btc";
 
 function Home() {
   const { user, isPending } = useCurrentUserState();
@@ -206,7 +206,7 @@ function Paywall({
       <h2 className="font-display text-3xl">Complete membership</h2>
       <p className="mt-3 text-sm leading-relaxed text-muted">
         One-time $5. Credited in full on your first order so it breaks even when you buy.
-        Card payments settle to us in USDC via NexaPay. Crypto is USDT on Tron, BTC, or USDC.
+        Card payments settle to us in USDC via NexaPay. Crypto is Bitcoin only.
       </p>
       <RailPicker value={rail} onChange={setRail} settings={settings} amountLabel="$5.00" />
       <Button className="mt-6 w-full" disabled={busy} onClick={() => void pay()}>
@@ -452,19 +452,10 @@ function RailPicker({
       label: "Card (NexaPay)",
       hint: "Visa, Mastercard, Apple Pay, Google Pay · we receive USDC",
     },
-    { id: "usdt_tron", label: "USDT · Tron", hint: settings.usdtTronWallet || "Address set in admin" },
     { id: "btc", label: "Bitcoin", hint: settings.btcWallet || "Address set in admin" },
-    { id: "usdc", label: "USDC", hint: settings.usdcPayWallet || settings.usdcWallet || "Address set in admin" },
   ];
   const selected = rails.find((r) => r.id === value)!;
-  const addr =
-    value === "usdt_tron"
-      ? settings.usdtTronWallet
-      : value === "btc"
-        ? settings.btcWallet
-        : value === "usdc"
-          ? settings.usdcPayWallet || settings.usdcWallet
-          : "";
+  const addr = value === "btc" ? settings.btcWallet : "";
 
   return (
     <div className="mt-4 space-y-2">

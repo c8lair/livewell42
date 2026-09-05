@@ -331,9 +331,7 @@ function SettingsBlock({
   const [freeAt, setFreeAt] = useState((settings.free_shipping_at_cents / 100).toFixed(2));
   const [nexapay, setNexapay] = useState(settings.nexapay_api_key);
   const [usdc, setUsdc] = useState(settings.usdc_wallet);
-  const [tron, setTron] = useState(settings.usdt_tron_wallet);
   const [btc, setBtc] = useState(settings.btc_wallet);
-  const [usdcPay, setUsdcPay] = useState(settings.usdc_pay_wallet);
   const [bannerEnabled, setBannerEnabled] = useState(Boolean(settings.banner_enabled));
   const [bannerText, setBannerText] = useState(settings.banner_text ?? "");
 
@@ -388,16 +386,8 @@ function SettingsBlock({
         <Input value={usdc} onChange={(e) => setUsdc(e.target.value)} />
       </div>
       <div>
-        <Label>USDT Tron receive address</Label>
-        <Input value={tron} onChange={(e) => setTron(e.target.value)} />
-      </div>
-      <div>
         <Label>BTC receive address</Label>
         <Input value={btc} onChange={(e) => setBtc(e.target.value)} />
-      </div>
-      <div>
-        <Label>USDC customer-pay address</Label>
-        <Input value={usdcPay} onChange={(e) => setUsdcPay(e.target.value)} />
       </div>
       <div className="flex flex-wrap gap-3">
         <Button
@@ -411,9 +401,7 @@ function SettingsBlock({
                 freeAtDollars: freeAt,
                 nexapayApiKey: nexapay,
                 usdcWallet: usdc,
-                usdtTronWallet: tron,
                 btcWallet: btc,
-                usdcPayWallet: usdcPay,
                 bannerEnabled,
                 bannerText,
               },
