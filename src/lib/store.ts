@@ -178,7 +178,7 @@ export const getBootstrap = createServerFn({ method: "GET" })
     let products: Product[] = [];
     if ((me.member || me.isAdmin) && me.legalAcceptedAt) {
       const sql = await getSql();
-      const rows = await sql<ProductRow>`select id, name, size_label, category, price_cents, stock, coa_url, active, sort_order from products where active = true order by sort_order, id`;
+      const rows = await sql<ProductRow>`select id, name, size_label, category, price_cents, stock, coa_url, active, sort_order from products where active = true order by lower(name), id`;
       products = rows.map(mapProduct);
     }
     return { me, settings, products };
@@ -363,7 +363,7 @@ export const adminGet = createServerFn({ method: "GET" })
     await requireAdmin(context.userId);
     const sql = await getSql();
     const settings = await loadSettings();
-    const products = await sql<ProductRow>`select id, name, size_label, category, price_cents, stock, coa_url, active, sort_order from products order by sort_order, id`;
+    const products = await sql<ProductRow>`select id, name, size_label, category, price_cents, stock, coa_url, active, sort_order from products order by lower(name), id`;
     const orders = await sql<{
       id: number;
       order_number: string;
