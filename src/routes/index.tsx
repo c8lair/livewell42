@@ -20,7 +20,7 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/")({ component: Home });
 
-type Rail = "card" | "usdt_tron" | "btc" | "usdc";
+type Rail = "card" | "btc";
 
 function Home() {
   const { user, isPending } = useCurrentUserState();
@@ -62,29 +62,59 @@ function MemberApp() {
   const [settings, setSettings] = useState<PublicSettings | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   async function refresh() {
     const data = await getBootstrap();
     setMe(data.me);
     setSettings(data.settings);
     setProducts(data.products);
+    setLoadError(null);
     setLoading(false);
   }
 
   useEffect(() => {
-    void refresh().catch(() => setLoading(false));
+    void refresh().catch((err) => {
+      setLoading(false);
+      setLoadError(err instanceof Error ? err.message : "Could not load the shop.");
+    });
   }, []);
 
-  if (loading || !me || !settings) {
+  if (loading) {
     return <div className="min-h-dvh bg-bg" />;
   }
 
+  if (loadError || !me || !settings) {
+    return (
+      <main className="mx-auto flex min-h-dvh max-w-lg flex-col justify-center px-6 py-16">
+        <p className="text-sm leading-relaxed text-muted">
+          {loadError || "Could not load the shop."}
+        </p>
+        <Link
+          to="/login"
+          className="mt-8 inline-flex h-11 items-center justify-center rounded-md bg-accent px-6 text-sm font-medium text-accent-fg"
+        >
+          Sign in
+        </Link>
+      </main>
+    );
+  }
+
+  const inShop =
+    Boolean(me.legalAcceptedAt) && (me.member || me.isAdmin);
+  const showBanner =
+    inShop && settings.bannerEnabled && settings.bannerText.trim().length > 0;
+
   return (
     <div className="min-h-dvh pb-40">
+      {showBanner ? (
+        <div className="border-b border-border bg-raised px-5 py-3 text-center text-sm leading-relaxed text-fg">
+          <p className="mx-auto max-w-3xl">{settings.bannerText.trim()}</p>
+        </div>
+      ) : null}
       <header className="mx-auto flex max-w-3xl items-center justify-between px-5 py-5">
         <div>
           <p className="font-display text-xl tracking-tight">{settings.storeName}</p>
-          <p className="text-xs text-faint">{me.email}</p>
         </div>
         <div className="flex items-center gap-3 text-sm">
           {me.isAdmin && me.legalAcceptedAt ? (
@@ -176,7 +206,7 @@ function Paywall({
       <h2 className="font-display text-3xl">Complete membership</h2>
       <p className="mt-3 text-sm leading-relaxed text-muted">
         One-time $5. Credited in full on your first order so it breaks even when you buy.
-        Card payments settle to us in USDC via NexaPay. Crypto is USDT on Tron, BTC, or USDC.
+        Card payments settle to us in USDC via NexaPay. Crypto is Bitcoin only.
       </p>
       <RailPicker value={rail} onChange={setRail} settings={settings} amountLabel="$5.00" />
       <Button className="mt-6 w-full" disabled={busy} onClick={() => void pay()}>
@@ -426,19 +456,10 @@ function RailPicker({
       label: "Card (NexaPay)",
       hint: "Visa, Mastercard, Apple Pay, Google Pay · we receive USDC",
     },
-    { id: "usdt_tron", label: "USDT · Tron", hint: settings.usdtTronWallet || "Address set in admin" },
     { id: "btc", label: "Bitcoin", hint: settings.btcWallet || "Address set in admin" },
-    { id: "usdc", label: "USDC", hint: settings.usdcPayWallet || settings.usdcWallet || "Address set in admin" },
   ];
   const selected = rails.find((r) => r.id === value)!;
-  const addr =
-    value === "usdt_tron"
-      ? settings.usdtTronWallet
-      : value === "btc"
-        ? settings.btcWallet
-        : value === "usdc"
-          ? settings.usdcPayWallet || settings.usdcWallet
-          : "";
+  const addr = value === "btc" ? settings.btcWallet : "";
 
   return (
     <div className="mt-4 space-y-2">

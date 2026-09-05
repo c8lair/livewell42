@@ -8,6 +8,7 @@ import {
   adminSaveSettings,
   adminSalesCsv,
   adminUpdateOrder,
+  repairOwnerAdmin,
   type Product,
 } from "@/lib/store";
 import { cents } from "@/lib/money";
@@ -41,9 +42,27 @@ function AdminPage() {
     return (
       <main className="mx-auto max-w-md px-6 py-20 text-center">
         <p className="text-muted">This desk is for the operator only.</p>
-        <Link to="/" className="mt-4 inline-block text-accent">
-          Back
-        </Link>
+        <div className="mt-6 flex flex-col items-center gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              void repairOwnerAdmin()
+                .then(() => {
+                  toast.success("Operator access restored");
+                  void refresh();
+                })
+                .catch((err) => {
+                  toast.error(err instanceof Error ? err.message : "Could not repair access.");
+                });
+            }}
+          >
+            Repair operator access
+          </Button>
+          <Link to={user ? "/" : "/login"} className="inline-block text-accent">
+            Back
+          </Link>
+        </div>
       </main>
     );
   }
@@ -58,7 +77,18 @@ function AdminPage() {
           </Link>
           <h1 className="font-display text-3xl">Back office</h1>
         </div>
-        <UserButton />
+        <div className="flex items-center gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() =>
+              window.open("https://mail.zoho.com", "_blank", "noopener,noreferrer")
+            }
+          >
+            Check Email
+          </Button>
+          <UserButton />
+        </div>
       </header>
 
       <section className="rounded-xl border border-border bg-surface p-4">
@@ -301,9 +331,9 @@ function SettingsBlock({
   const [freeAt, setFreeAt] = useState((settings.free_shipping_at_cents / 100).toFixed(2));
   const [nexapay, setNexapay] = useState(settings.nexapay_api_key);
   const [usdc, setUsdc] = useState(settings.usdc_wallet);
-  const [tron, setTron] = useState(settings.usdt_tron_wallet);
   const [btc, setBtc] = useState(settings.btc_wallet);
-  const [usdcPay, setUsdcPay] = useState(settings.usdc_pay_wallet);
+  const [bannerEnabled, setBannerEnabled] = useState(Boolean(settings.banner_enabled));
+  const [bannerText, setBannerText] = useState(settings.banner_text ?? "");
 
   return (
     <section className="mt-10 space-y-3">
@@ -311,6 +341,23 @@ function SettingsBlock({
       <div>
         <Label>Store name</Label>
         <Input value={storeName} onChange={(e) => setStoreName(e.target.value)} />
+      </div>
+      <label className="flex items-center gap-2 text-sm text-muted">
+        <input
+          type="checkbox"
+          checked={bannerEnabled}
+          onChange={(e) => setBannerEnabled(e.target.checked)}
+        />
+        Show banner
+      </label>
+      <div>
+        <Label>Announcement</Label>
+        <Input
+          value={bannerText}
+          maxLength={280}
+          onChange={(e) => setBannerText(e.target.value)}
+          placeholder="Shown at the top of the shop when enabled"
+        />
       </div>
       <div>
         <Label>Support email (shown to members)</Label>
@@ -339,39 +386,49 @@ function SettingsBlock({
         <Input value={usdc} onChange={(e) => setUsdc(e.target.value)} />
       </div>
       <div>
-        <Label>USDT Tron receive address</Label>
-        <Input value={tron} onChange={(e) => setTron(e.target.value)} />
-      </div>
-      <div>
         <Label>BTC receive address</Label>
         <Input value={btc} onChange={(e) => setBtc(e.target.value)} />
       </div>
-      <div>
-        <Label>USDC customer-pay address</Label>
-        <Input value={usdcPay} onChange={(e) => setUsdcPay(e.target.value)} />
+      <div className="flex flex-wrap gap-3">
+        <Button
+          onClick={async () => {
+            await adminSaveSettings({
+              data: {
+                storeName,
+                supportEmail,
+                ownerEmail,
+                shippingDollars: ship,
+                freeAtDollars: freeAt,
+                nexapayApiKey: nexapay,
+                usdcWallet: usdc,
+                btcWallet: btc,
+                bannerEnabled,
+                bannerText,
+              },
+            });
+            toast.success("Settings saved");
+            onSave();
+          }}
+        >
+          Save settings
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => {
+            void repairOwnerAdmin()
+              .then(() => {
+                toast.success("Operator access confirmed for this account");
+                onSave();
+              })
+              .catch((err) => {
+                toast.error(err instanceof Error ? err.message : "Could not repair access.");
+              });
+          }}
+        >
+          Repair operator access
+        </Button>
       </div>
-      <Button
-        onClick={async () => {
-          await adminSaveSettings({
-            data: {
-              storeName,
-              supportEmail,
-              ownerEmail,
-              shippingDollars: ship,
-              freeAtDollars: freeAt,
-              nexapayApiKey: nexapay,
-              usdcWallet: usdc,
-              usdtTronWallet: tron,
-              btcWallet: btc,
-              usdcPayWallet: usdcPay,
-            },
-          });
-          toast.success("Settings saved");
-          onSave();
-        }}
-      >
-        Save settings
-      </Button>
     </section>
   );
 }

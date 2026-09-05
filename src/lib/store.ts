@@ -23,10 +23,10 @@ export type PublicSettings = {
   shippingCents: number;
   freeShippingAtCents: number;
   usdcWallet: string;
-  usdtTronWallet: string;
   btcWallet: string;
-  usdcPayWallet: string;
   nexapayConfigured: boolean;
+  bannerEnabled: boolean;
+  bannerText: string;
 };
 
 export type Me = {
@@ -58,9 +58,9 @@ type SettingsRow = {
   free_shipping_at_cents: number;
   nexapay_api_key: string;
   usdc_wallet: string;
-  usdt_tron_wallet: string;
   btc_wallet: string;
-  usdc_pay_wallet: string;
+  banner_enabled: boolean;
+  banner_text: string;
 };
 
 function mapProduct(r: ProductRow): Product {
@@ -119,7 +119,7 @@ async function ensureProfile(
 
 async function loadSettings(): Promise<SettingsRow> {
   const sql = await getSql();
-  const rows = await sql<SettingsRow>`select store_name, support_email, owner_email, shipping_cents, free_shipping_at_cents, nexapay_api_key, usdc_wallet, usdt_tron_wallet, btc_wallet, usdc_pay_wallet from store_settings where id = 1`;
+  const rows = await sql<SettingsRow>`select store_name, support_email, owner_email, shipping_cents, free_shipping_at_cents, nexapay_api_key, usdc_wallet, btc_wallet, banner_enabled, banner_text from store_settings where id = 1`;
   const r = rows[0];
   if (!r) {
     await sql`insert into store_settings (id, store_name) values (1, 'Livewell42') on conflict (id) do nothing`;
@@ -131,9 +131,9 @@ async function loadSettings(): Promise<SettingsRow> {
       free_shipping_at_cents: 25000,
       nexapay_api_key: "",
       usdc_wallet: "",
-      usdt_tron_wallet: "",
       btc_wallet: "",
-      usdc_pay_wallet: "",
+      banner_enabled: false,
+      banner_text: "",
     };
   }
   if (r.store_name === "Alder") {
@@ -150,10 +150,10 @@ function publicize(s: SettingsRow): PublicSettings {
     shippingCents: s.shipping_cents,
     freeShippingAtCents: s.free_shipping_at_cents,
     usdcWallet: s.usdc_wallet,
-    usdtTronWallet: s.usdt_tron_wallet,
     btcWallet: s.btc_wallet,
-    usdcPayWallet: s.usdc_pay_wallet,
     nexapayConfigured: Boolean(s.nexapay_api_key),
+    bannerEnabled: Boolean(s.banner_enabled),
+    bannerText: s.banner_text ?? "",
   };
 }
 
@@ -178,7 +178,7 @@ export const getBootstrap = createServerFn({ method: "GET" })
     let products: Product[] = [];
     if ((me.member || me.isAdmin) && me.legalAcceptedAt) {
       const sql = await getSql();
-      const rows = await sql<ProductRow>`select id, name, size_label, category, price_cents, stock, coa_url, active, sort_order from products where active = true order by sort_order, id`;
+      const rows = await sql<ProductRow>`select id, name, size_label, category, price_cents, stock, coa_url, active, sort_order from products where active = true order by lower(name), id`;
       products = rows.map(mapProduct);
     }
     return { me, settings, products };
@@ -196,7 +196,7 @@ export const acceptLegal = createServerFn({ method: "POST" })
 export const payMembership = createServerFn({ method: "POST" })
   .validator(
     z.object({
-      rail: z.enum(["card", "usdt_tron", "btc", "usdc"]),
+      rail: z.enum(["card", "btc"]),
     }),
   )
   .middleware([authMiddleware])
@@ -226,7 +226,7 @@ const checkoutSchema = z.object({
   shipCity: z.string().trim().min(1).max(80),
   shipState: z.string().trim().length(2),
   shipZip: z.string().trim().regex(/^\d{5}(-\d{4})?$/),
-  rail: z.enum(["card", "usdt_tron", "btc", "usdc"]),
+  rail: z.enum(["card", "btc"]),
 });
 
 export const placeOrder = createServerFn({ method: "POST" })
@@ -332,13 +332,38 @@ async function requireAdmin(userId: string) {
   return me;
 }
 
+/** One-time repair: signed-in owner email (or known operator Gmail) becomes admin. */
+export const repairOwnerAdmin = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const { getSessionUser } = await import("@/lib/auth/verify.server");
+    const session = await getSessionUser();
+    const email = (session?.email ?? "").trim().toLowerCase();
+    if (!email) throw new Error("Sign in first.");
+
+    const settings = await loadSettings();
+    const owner = (settings.owner_email || "").trim().toLowerCase();
+    const knownOperator = "c8lair@gmail.com";
+    if (email !== owner && email !== knownOperator) {
+      throw new Error("Only the owner email can repair operator access.");
+    }
+
+    await ensureProfile(context.userId, email);
+    const sql = await getSql();
+    await sql`update profiles set is_admin = true, email = ${email} where user_id = ${context.userId}`;
+    if (!owner) {
+      await sql`update store_settings set owner_email = ${email} where id = 1`;
+    }
+    return { ok: true as const };
+  });
+
 export const adminGet = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     await requireAdmin(context.userId);
     const sql = await getSql();
     const settings = await loadSettings();
-    const products = await sql<ProductRow>`select id, name, size_label, category, price_cents, stock, coa_url, active, sort_order from products order by sort_order, id`;
+    const products = await sql<ProductRow>`select id, name, size_label, category, price_cents, stock, coa_url, active, sort_order from products order by lower(name), id`;
     const orders = await sql<{
       id: number;
       order_number: string;
@@ -434,9 +459,9 @@ export const adminSaveSettings = createServerFn({ method: "POST" })
       freeAtDollars: z.string().trim(),
       nexapayApiKey: z.string().trim().max(200),
       usdcWallet: z.string().trim().max(200),
-      usdtTronWallet: z.string().trim().max(200),
       btcWallet: z.string().trim().max(200),
-      usdcPayWallet: z.string().trim().max(200),
+      bannerEnabled: z.boolean(),
+      bannerText: z.string().trim().max(280),
     }),
   )
   .middleware([authMiddleware])
@@ -453,9 +478,9 @@ export const adminSaveSettings = createServerFn({ method: "POST" })
       free_shipping_at_cents = ${freeAt},
       nexapay_api_key = ${data.nexapayApiKey},
       usdc_wallet = ${data.usdcWallet},
-      usdt_tron_wallet = ${data.usdtTronWallet},
       btc_wallet = ${data.btcWallet},
-      usdc_pay_wallet = ${data.usdcPayWallet}
+      banner_enabled = ${data.bannerEnabled},
+      banner_text = ${data.bannerText}
       where id = 1`;
     return { ok: true };
   });
