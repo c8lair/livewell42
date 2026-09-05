@@ -86,16 +86,6 @@ function MemberApp() {
           <p className="font-display text-xl tracking-tight">{settings.storeName}</p>
         </div>
         <div className="flex items-center gap-3 text-sm">
-          {me.isAdmin ? (
-            <Link
-              to="https://mail.zoho.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-muted hover:text-fg"
-            >
-              Check Email
-            </Link>
-          ) : null}
           {me.isAdmin && me.legalAcceptedAt ? (
             <Link to="/admin" className="text-muted hover:text-fg">
               Admin

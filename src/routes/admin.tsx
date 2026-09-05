@@ -58,7 +58,18 @@ function AdminPage() {
           </Link>
           <h1 className="font-display text-3xl">Back office</h1>
         </div>
-        <UserButton />
+        <div className="flex items-center gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() =>
+              window.open("https://mail.zoho.com", "_blank", "noopener,noreferrer")
+            }
+          >
+            Check Email
+          </Button>
+          <UserButton />
+        </div>
       </header>
 
       <section className="rounded-xl border border-border bg-surface p-4">
