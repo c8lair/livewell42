@@ -518,13 +518,48 @@ const checkoutSchema = z.object({
   rail: z.enum(["card", "btc"]),
 });
 
+const ZIP_RE = /^\d{5}(-\d{4})?$/;
+
+function validateCheckoutInput(input: unknown) {
+  const raw =
+    input && typeof input === "object" && "data" in (input as object)
+      ? (input as { data: unknown }).data
+      : input;
+  const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const shipName = String(o.shipName ?? "").trim();
+  const shipStreet = String(o.shipStreet ?? "").trim();
+  const shipCity = String(o.shipCity ?? "").trim();
+  const shipState = String(o.shipState ?? "").trim().toUpperCase();
+  const shipZip = String(o.shipZip ?? "").trim();
+
+  if (shipZip && !ZIP_RE.test(shipZip)) {
+    throw new Error("Error: enter a 5-digit ZIP");
+  }
+  if (!shipState || shipState.length !== 2 || !LOWER_48_CODES.has(shipState)) {
+    throw new Error("Error: choose a state we ship to");
+  }
+  if (!shipName || !shipStreet || !shipCity || !shipZip) {
+    throw new Error("Error: please enter shipping address");
+  }
+
+  const parsed = checkoutSchema.safeParse({
+    ...o,
+    shipName,
+    shipStreet,
+    shipCity,
+    shipState,
+    shipZip,
+  });
+  if (!parsed.success) {
+    throw new Error("Error: please enter shipping address");
+  }
+  return parsed.data;
+}
+
 export const placeOrder = createServerFn({ method: "POST" })
-  .validator(checkoutSchema)
+  .validator(validateCheckoutInput)
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
-    if (!LOWER_48_CODES.has(data.shipState)) {
-      throw new Error("We only ship to the lower 48 states.");
-    }
     const me = await ensureProfile(context.userId, null);
     if (!me.legalAcceptedAt) throw new Error("Confirm the sign-in statements first.");
     if (!me.member && !me.isAdmin) throw new Error("Membership required.");

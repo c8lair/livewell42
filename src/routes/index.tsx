@@ -214,16 +214,33 @@ function Shop({
       toast.error("Add a quantity first.");
       return;
     }
+    const shipName = name.trim();
+    const shipStreet = street.trim();
+    const shipCity = city.trim();
+    const shipState = state.trim().toUpperCase();
+    const shipZip = zip.trim();
+    if (shipZip && !/^\d{5}(-\d{4})?$/.test(shipZip)) {
+      toast.error("Error: enter a 5-digit ZIP");
+      return;
+    }
+    if (!shipState || shipState.length !== 2) {
+      toast.error("Error: choose a state we ship to");
+      return;
+    }
+    if (!shipName || !shipStreet || !shipCity || !shipZip) {
+      toast.error("Error: please enter shipping address");
+      return;
+    }
     setBusy(true);
     try {
       const res = await placeOrder({
         data: {
           items: lines.map((l) => ({ productId: l.product.id, qty: l.qty })),
-          shipName: name,
-          shipStreet: street,
-          shipCity: city,
-          shipState: state,
-          shipZip: zip,
+          shipName,
+          shipStreet,
+          shipCity,
+          shipState,
+          shipZip,
           rail,
         },
       });
@@ -239,7 +256,13 @@ function Shop({
       setQty({});
       onPaid();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not place the order.");
+      const raw = err instanceof Error ? err.message : "";
+      const msg = raw.trim();
+      if (!msg || msg.startsWith("[") || msg.startsWith("{") || msg.includes('"code"')) {
+        toast.error("Error: please enter shipping address");
+      } else {
+        toast.error(msg);
+      }
     } finally {
       setBusy(false);
     }
