@@ -510,6 +510,9 @@ function SettingsBlock({
   const [usdc, setUsdc] = useState(settings.usdc_wallet);
   const [btc, setBtc] = useState(settings.btc_wallet);
   const [btcEnabled, setBtcEnabled] = useState(Boolean(settings.btc_enabled));
+  const [nexapayEnabled, setNexapayEnabled] = useState(
+    settings.nexapay_enabled !== false,
+  );
   const [bannerEnabled, setBannerEnabled] = useState(Boolean(settings.banner_enabled));
   const [bannerText, setBannerText] = useState(settings.banner_text ?? "");
 
@@ -555,6 +558,20 @@ function SettingsBlock({
           <Input value={freeAt} onChange={(e) => setFreeAt(e.target.value)} />
         </div>
       </div>
+      <label className="flex items-start gap-2 text-sm text-muted">
+        <input
+          type="checkbox"
+          className="mt-1"
+          checked={nexapayEnabled}
+          onChange={(e) => setNexapayEnabled(e.target.checked)}
+        />
+        <span>
+          Accept card payments (NexaPay)
+          <span className="mt-0.5 block text-xs text-faint">
+            On by default. Turn off to hide Card checkout without clearing the API key.
+          </span>
+        </span>
+      </label>
       <div>
         <Label>NexaPay API key</Label>
         <Input value={nexapay} onChange={(e) => setNexapay(e.target.value)} />
@@ -601,6 +618,7 @@ function SettingsBlock({
                 bannerEnabled,
                 bannerText,
                 btcEnabled,
+                nexapayEnabled,
               },
             });
             toast.success("Settings saved");

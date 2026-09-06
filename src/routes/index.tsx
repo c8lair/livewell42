@@ -328,7 +328,7 @@ function Shop({
                 Due {cents(due)}
               </p>
             </div>
-            <Button disabled={busy || merchandise === 0} onClick={() => void checkout()}>
+            <Button disabled={busy || merchandise === 0 || (!settings.nexapayEnabled && !settings.btcEnabled)} onClick={() => void checkout()}>
               {busy ? "Placing…" : "Pay now"}
             </Button>
           </div>
@@ -537,58 +537,75 @@ function RailPicker({
   settings: PublicSettings;
   amountLabel: string;
 }) {
+  const cardOn = Boolean(settings.nexapayEnabled);
   const btcOn = Boolean(settings.btcEnabled);
 
   useEffect(() => {
-    if (!btcOn && value === "btc") onChange("card");
-  }, [btcOn, value, onChange]);
+    if (!cardOn && btcOn && value === "card") onChange("btc");
+    if (!btcOn && cardOn && value === "btc") onChange("card");
+  }, [cardOn, btcOn, value, onChange]);
 
-  const rails: { id: Rail; label: string; hint: string }[] = [
-    {
+  const rails: { id: Rail; label: string; hint: string }[] = [];
+  if (cardOn) {
+    rails.push({
       id: "card",
       label: "Card (NexaPay)",
       hint: "Visa, Mastercard, Apple Pay, Google Pay",
-    },
-  ];
+    });
+  }
   if (btcOn) {
     rails.push({ id: "btc", label: "Bitcoin", hint: settings.btcWallet || "Address set in admin" });
   }
 
-  const effective: Rail = !btcOn ? "card" : value;
-  const selected = rails.find((r) => r.id === effective) ?? rails[0];
+  const effective: Rail =
+    cardOn && (!btcOn || value === "card")
+      ? "card"
+      : btcOn
+        ? "btc"
+        : "card";
+  const selected = rails.find((r) => r.id === effective);
   const addr = effective === "btc" ? settings.btcWallet : "";
 
   return (
     <div className="mt-4 space-y-2">
       <p className="text-xs text-muted">Pay {amountLabel}</p>
-      <div className={`grid gap-2 ${rails.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
-        {rails.map((r) => (
-          <button
-            key={r.id}
-            type="button"
-            onClick={() => onChange(r.id)}
-            className={`rounded-md border px-3 py-3 text-left text-sm ${
-              effective === r.id ? "border-accent bg-raised text-fg" : "border-border text-muted"
-            }`}
-          >
-            {r.id === "card" ? (
-              <span className="flex w-full items-center justify-between gap-3">
-                <span className="shrink-0">{r.label}</span>
-                <CardRailMarks />
-              </span>
-            ) : (
-              <span className="block">{r.label}</span>
-            )}
-          </button>
-        ))}
-      </div>
-      <p className="text-xs leading-relaxed text-faint">
-        {effective === "card"
-          ? selected.hint
-          : addr
-            ? `Send exactly ${amountLabel} on the correct network to ${addr}`
-            : `${selected.hint}. Confirm after sending — admin can mark paid if chain watch is not connected.`}
-      </p>
+      {!cardOn ? (
+        <p className="text-sm text-muted">Card checkout is temporarily off.</p>
+      ) : null}
+      {rails.length === 0 ? (
+        <p className="text-sm text-muted">No payment methods are available right now.</p>
+      ) : (
+        <div className={`grid gap-2 ${rails.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
+          {rails.map((r) => (
+            <button
+              key={r.id}
+              type="button"
+              onClick={() => onChange(r.id)}
+              className={`rounded-md border px-3 py-3 text-left text-sm ${
+                effective === r.id ? "border-accent bg-raised text-fg" : "border-border text-muted"
+              }`}
+            >
+              {r.id === "card" ? (
+                <span className="flex w-full items-center justify-between gap-3">
+                  <span className="shrink-0">{r.label}</span>
+                  <CardRailMarks />
+                </span>
+              ) : (
+                <span className="block">{r.label}</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+      {selected ? (
+        <p className="text-xs leading-relaxed text-faint">
+          {effective === "card"
+            ? selected.hint
+            : addr
+              ? `Send exactly ${amountLabel} on the correct network to ${addr}`
+              : `${selected.hint}. Confirm after sending — admin can mark paid if chain watch is not connected.`}
+        </p>
+      ) : null}
     </div>
   );
 }
