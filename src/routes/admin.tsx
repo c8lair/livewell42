@@ -122,7 +122,7 @@ function AdminPage() {
         items={data.items}
         onSave={() => void refresh()}
       />
-      <SettingsBlock settings={data.settings} onSave={() => void refresh()} />
+      <SettingsBlock settings={data.settings} nexapayWebhookSecretConfigured={data.nexapayWebhookSecretConfigured} onSave={() => void refresh()} />
       <MailBlock mail={data.mail} />
     </div>
   );
@@ -426,9 +426,11 @@ function OrderStatus({
 
 function SettingsBlock({
   settings,
+  nexapayWebhookSecretConfigured,
   onSave,
 }: {
   settings: Awaited<ReturnType<typeof adminGet>>["settings"];
+  nexapayWebhookSecretConfigured: boolean;
   onSave: () => void;
 }) {
   const [storeName, setStoreName] = useState(settings.store_name);
@@ -488,6 +490,10 @@ function SettingsBlock({
         <Label>NexaPay API key</Label>
         <Input value={nexapay} onChange={(e) => setNexapay(e.target.value)} />
       </div>
+      <p className="text-sm text-muted">
+        Webhook secret:{" "}
+        {nexapayWebhookSecretConfigured ? "configured" : "missing"}
+      </p>
       <div>
         <Label>USDC settle wallet (NexaPay payout)</Label>
         <Input value={usdc} onChange={(e) => setUsdc(e.target.value)} />

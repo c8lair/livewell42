@@ -709,6 +709,9 @@ export const adminGet = createServerFn({ method: "GET" })
     }>`select id, kind, to_email, subject, created_at, body from mail_log order by id desc limit 40`;
     return {
       settings,
+      nexapayWebhookSecretConfigured: Boolean(
+        process.env.NEXAPAY_WEBHOOK_SECRET?.trim(),
+      ),
       products: products.map(mapProduct),
       orders,
       items,
