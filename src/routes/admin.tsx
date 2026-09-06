@@ -162,13 +162,18 @@ function ProductsBlock({
     }
   }
 
+  const sortedProducts = [...products].sort((a, b) => {
+    if (a.active !== b.active) return a.active ? -1 : 1;
+    return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+  });
+
   return (
     <section className="mt-10">
       <h2 className="font-display text-2xl">Products</h2>
       <p className="mt-1 text-sm text-muted">Add a row in under a minute. COA is a link — leave blank until you have one.</p>
       <ProductForm onSave={onSave} />
       <ul className="mt-4 divide-y divide-border border-y border-border">
-        {products.map((p) => {
+        {sortedProducts.map((p) => {
           const open = openId === p.id;
           const sizePart = p.sizeLabel.trim() ? ` ${p.sizeLabel.trim()}` : "";
           const banner = `${p.name}${sizePart} · ${cents(p.priceCents)} · ${p.stock} in stock`;
