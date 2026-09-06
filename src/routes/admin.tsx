@@ -14,6 +14,7 @@ import {
 import { cents } from "@/lib/money";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select } from "@/components/ui/field";
+import { ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/admin")({ component: AdminPage });
@@ -134,17 +135,42 @@ function ProductsBlock({
   products: Product[];
   onSave: () => void;
 }) {
+  const [openId, setOpenId] = useState<number | null>(null);
+
   return (
     <section className="mt-10">
       <h2 className="font-display text-2xl">Products</h2>
       <p className="mt-1 text-sm text-muted">Add a row in under a minute. COA is a link — leave blank until you have one.</p>
       <ProductForm onSave={onSave} />
       <ul className="mt-4 divide-y divide-border border-y border-border">
-        {products.map((p) => (
-          <li key={p.id} className="py-4">
-            <ProductForm product={p} onSave={onSave} />
-          </li>
-        ))}
+        {products.map((p) => {
+          const open = openId === p.id;
+          const sizePart = p.sizeLabel.trim() ? ` ${p.sizeLabel.trim()}` : "";
+          const banner = `${p.name}${sizePart} · ${cents(p.priceCents)} · ${p.stock} in stock`;
+          return (
+            <li key={p.id} className="py-2">
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 py-2 text-left text-sm"
+                aria-expanded={open}
+                onClick={() => setOpenId(open ? null : p.id)}
+              >
+                <ChevronRight
+                  className={`size-4 shrink-0 text-muted transition-transform duration-150 ${
+                    open ? "rotate-90" : ""
+                  }`}
+                  aria-hidden
+                />
+                <span className="min-w-0 flex-1 truncate font-medium text-fg">{banner}</span>
+              </button>
+              {open ? (
+                <div className="pb-4 pl-6">
+                  <ProductForm product={p} onSave={onSave} />
+                </div>
+              ) : null}
+            </li>
+          );
+        })}
       </ul>
     </section>
   );
