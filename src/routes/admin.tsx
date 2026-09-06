@@ -4,9 +4,11 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { UserButton } from "@/lib/auth/gates";
 import {
   adminGet,
+  adminRestoreOrder,
   adminSaveProduct,
   adminSaveSettings,
   adminSalesCsv,
+  adminSoftDeleteOrder,
   adminUpdateOrder,
   repairOwnerAdmin,
   type Product,
@@ -119,6 +121,7 @@ function AdminPage() {
       <ProductsBlock products={data.products} onSave={() => void refresh()} />
       <OrdersBlock
         orders={data.orders}
+        archivedOrders={data.archivedOrders}
         items={data.items}
         onSave={() => void refresh()}
       />
@@ -315,19 +318,45 @@ function ProductForm({
 
 function OrdersBlock({
   orders,
+  archivedOrders,
   items,
   onSave,
 }: {
   orders: Awaited<ReturnType<typeof adminGet>>["orders"];
+  archivedOrders: Awaited<ReturnType<typeof adminGet>>["archivedOrders"];
   items: Awaited<ReturnType<typeof adminGet>>["items"];
   onSave: () => void;
 }) {
+  const [view, setView] = useState<"live" | "archive">("live");
+  const list = view === "live" ? orders : archivedOrders;
+  const archived = view === "archive";
+
   return (
     <section className="mt-10">
-      <h2 className="font-display text-2xl">Orders</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="font-display text-2xl">{archived ? "Archive" : "Orders"}</h2>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant={view === "live" ? "primary" : "outline"}
+            onClick={() => setView("live")}
+          >
+            Orders
+          </Button>
+          <Button
+            type="button"
+            variant={view === "archive" ? "primary" : "outline"}
+            onClick={() => setView("archive")}
+          >
+            Archive
+          </Button>
+        </div>
+      </div>
       <ul className="mt-3 space-y-3">
-        {orders.length === 0 ? <p className="text-sm text-muted">None yet.</p> : null}
-        {orders.map((o) => {
+        {list.length === 0 ? (
+          <p className="text-sm text-muted">{archived ? "No archived orders." : "None yet."}</p>
+        ) : null}
+        {list.map((o) => {
           const lines = items.filter((i) => i.order_id === o.id);
           return (
             <li key={o.id} className="rounded-xl border border-border bg-surface p-4 text-sm">
@@ -340,7 +369,7 @@ function OrdersBlock({
               <p className="mt-1 text-muted">
                 {lines.map((l) => `${l.qty}× ${l.name}`).join(", ")}
               </p>
-              <OrderStatus order={o} onSave={onSave} />
+              <OrderStatus order={o} archived={archived} onSave={onSave} />
             </li>
           );
         })}
@@ -351,9 +380,11 @@ function OrdersBlock({
 
 function OrderStatus({
   order,
+  archived,
   onSave,
 }: {
   order: Awaited<ReturnType<typeof adminGet>>["orders"][number];
+  archived: boolean;
   onSave: () => void;
 }) {
   const isPending = order.status === "pending";
@@ -361,68 +392,105 @@ function OrderStatus({
     (isPending ? "paid" : order.status) as "paid" | "packed" | "shipped" | "reshipped",
   );
   const [tracking, setTracking] = useState(order.tracking);
+  const [confirm, setConfirm] = useState<"delete" | "restore" | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  if (isPending) {
-    return (
-      <div className="mt-3 space-y-2">
-        <p className="rounded-md border border-border bg-raised px-3 py-2 text-xs text-muted">
-          Status: <span className="font-medium text-fg">Pending</span> (awaiting NexaPay card payment)
-        </p>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <Select value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
-            <option value="paid">Paid</option>
-            <option value="packed">Packed</option>
-            <option value="shipped">Shipped</option>
-            <option value="reshipped">Reshipped</option>
-          </Select>
-          <Input
-            placeholder="Tracking"
-            value={tracking}
-            onChange={(e) => setTracking(e.target.value)}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            onClick={async () => {
-              await adminUpdateOrder({ data: { id: order.id, status, tracking } });
-              toast.success("Order updated");
-              onSave();
-            }}
-          >
-            Save
-          </Button>
-        </div>
-      </div>
-    );
+  async function save() {
+    await adminUpdateOrder({ data: { id: order.id, status, tracking } });
+    toast.success("Order updated");
+    onSave();
+  }
+
+  async function runSoftDelete() {
+    setBusy(true);
+    try {
+      await adminSoftDeleteOrder({ data: { id: order.id } });
+      toast.success("Order moved to Archive");
+      setConfirm(null);
+      onSave();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not delete order.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runRestore() {
+    setBusy(true);
+    try {
+      await adminRestoreOrder({ data: { id: order.id } });
+      toast.success("Order restored");
+      setConfirm(null);
+      onSave();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not restore order.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
-    <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-      <Select value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
-        <option value="paid">Paid</option>
-        <option value="packed">Packed</option>
-        <option value="shipped">Shipped</option>
-        <option value="reshipped">Reshipped</option>
-      </Select>
-      <Input
-        placeholder="Tracking"
-        value={tracking}
-        onChange={(e) => setTracking(e.target.value)}
-      />
-      <Button
-        type="button"
-        variant="outline"
-        onClick={async () => {
-          await adminUpdateOrder({ data: { id: order.id, status, tracking } });
-          toast.success("Order updated");
-          onSave();
-        }}
-      >
-        Save
-      </Button>
+    <div className="mt-3 space-y-2">
+      {isPending && !archived ? (
+        <p className="rounded-md border border-border bg-raised px-3 py-2 text-xs text-muted">
+          Status: <span className="font-medium text-fg">Pending</span> (awaiting NexaPay card payment)
+        </p>
+      ) : null}
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+        <Select value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
+          <option value="paid">Paid</option>
+          <option value="packed">Packed</option>
+          <option value="shipped">Shipped</option>
+          <option value="reshipped">Reshipped</option>
+        </Select>
+        <Input
+          placeholder="Tracking"
+          value={tracking}
+          onChange={(e) => setTracking(e.target.value)}
+        />
+        <Button type="button" variant="outline" onClick={() => void save()}>
+          Save
+        </Button>
+        {archived ? (
+          <Button type="button" variant="outline" onClick={() => setConfirm("restore")}>
+            Restore
+          </Button>
+        ) : (
+          <Button type="button" variant="outline" onClick={() => setConfirm("delete")}>
+            Delete
+          </Button>
+        )}
+      </div>
+      {confirm === "delete" ? (
+        <div className="rounded-md border border-border bg-raised px-3 py-3 text-sm">
+          <p>Are you sure you want to delete this order?</p>
+          <div className="mt-2 flex gap-2">
+            <Button type="button" variant="outline" disabled={busy} onClick={() => setConfirm(null)}>
+              Cancel
+            </Button>
+            <Button type="button" variant="danger" disabled={busy} onClick={() => void runSoftDelete()}>
+              {busy ? "Deleting…" : "Delete"}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+      {confirm === "restore" ? (
+        <div className="rounded-md border border-border bg-raised px-3 py-3 text-sm">
+          <p>Are you sure you want to restore this order?</p>
+          <div className="mt-2 flex gap-2">
+            <Button type="button" variant="outline" disabled={busy} onClick={() => setConfirm(null)}>
+              Cancel
+            </Button>
+            <Button type="button" disabled={busy} onClick={() => void runRestore()}>
+              {busy ? "Restoring…" : "Restore"}
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
+
 
 function SettingsBlock({
   settings,

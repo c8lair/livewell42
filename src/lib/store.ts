@@ -662,7 +662,7 @@ export const listMyOrders = createServerFn({ method: "GET" })
       status: string;
       tracking: string;
       created_at: string;
-    }>`select order_number, total_cents, status, tracking, created_at from orders where user_id = ${context.userId} order by id desc`;
+    }>`select order_number, total_cents, status, tracking, created_at from orders where user_id = ${context.userId} and deleted_at is null order by id desc`;
   });
 
 async function requireAdmin(userId: string) {
@@ -703,24 +703,28 @@ export const adminGet = createServerFn({ method: "GET" })
     const sql = await getSql();
     const settings = await loadSettings();
     const products = await sql<ProductRow>`select id, name, size_label, category, price_cents, stock, coa_url, active, sort_order from products order by lower(name), id`;
-    const orders = await sql<{
-      id: number;
-      order_number: string;
-      user_id: string;
-      merchandise_cents: number;
-      credit_cents: number;
-      shipping_cents: number;
-      total_cents: number;
-      status: string;
-      ship_name: string;
-      ship_street: string;
-      ship_city: string;
-      ship_state: string;
-      ship_zip: string;
-      payment_rail: string;
-      tracking: string;
-      created_at: string;
-    }>`select id, order_number, user_id, merchandise_cents, credit_cents, shipping_cents, total_cents, status, ship_name, ship_street, ship_city, ship_state, ship_zip, payment_rail, tracking, created_at from orders order by id desc limit 200`;
+    const orderCols = {
+      id: 0 as number,
+      order_number: "" as string,
+      user_id: "" as string,
+      merchandise_cents: 0 as number,
+      credit_cents: 0 as number,
+      shipping_cents: 0 as number,
+      total_cents: 0 as number,
+      status: "" as string,
+      ship_name: "" as string,
+      ship_street: "" as string,
+      ship_city: "" as string,
+      ship_state: "" as string,
+      ship_zip: "" as string,
+      payment_rail: "" as string,
+      tracking: "" as string,
+      created_at: "" as string,
+      deleted_at: null as string | null,
+    };
+    type AdminOrderRow = typeof orderCols;
+    const orders = await sql<AdminOrderRow>`select id, order_number, user_id, merchandise_cents, credit_cents, shipping_cents, total_cents, status, ship_name, ship_street, ship_city, ship_state, ship_zip, payment_rail, tracking, created_at, deleted_at from orders where deleted_at is null order by id desc limit 200`;
+    const archivedOrders = await sql<AdminOrderRow>`select id, order_number, user_id, merchandise_cents, credit_cents, shipping_cents, total_cents, status, ship_name, ship_street, ship_city, ship_state, ship_zip, payment_rail, tracking, created_at, deleted_at from orders where deleted_at is not null order by deleted_at desc limit 200`;
     const items = await sql<{
       order_id: number;
       name: string;
@@ -741,7 +745,7 @@ export const adminGet = createServerFn({ method: "GET" })
         count(*)::int as order_count,
         coalesce(sum(total_cents), 0)::int as ytd_cents,
         coalesce(sum(case when created_at >= date_trunc('month', now()) then total_cents else 0 end), 0)::int as mtd_cents
-      from orders`;
+      from orders where deleted_at is null`;
     const mail = await sql<{
       id: number;
       kind: string;
@@ -757,6 +761,7 @@ export const adminGet = createServerFn({ method: "GET" })
       ),
       products: products.map(mapProduct),
       orders,
+      archivedOrders,
       items,
       members,
       sales: sales[0] ?? { order_count: 0, ytd_cents: 0, mtd_cents: 0 },
@@ -861,6 +866,26 @@ export const adminUpdateOrder = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export const adminSoftDeleteOrder = createServerFn({ method: "POST" })
+  .validator(z.object({ id: z.number().int() }))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    await requireAdmin(context.userId);
+    const sql = await getSql();
+    await sql`update orders set deleted_at = now() where id = ${data.id} and deleted_at is null`;
+    return { ok: true as const };
+  });
+
+export const adminRestoreOrder = createServerFn({ method: "POST" })
+  .validator(z.object({ id: z.number().int() }))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    await requireAdmin(context.userId);
+    const sql = await getSql();
+    await sql`update orders set deleted_at = null where id = ${data.id} and deleted_at is not null`;
+    return { ok: true as const };
+  });
+
 export const adminSalesCsv = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
@@ -875,7 +900,7 @@ export const adminSalesCsv = createServerFn({ method: "GET" })
       total_cents: number;
       payment_rail: string;
       status: string;
-    }>`select created_at, order_number, merchandise_cents, credit_cents, shipping_cents, total_cents, payment_rail, status from orders order by id`;
+    }>`select created_at, order_number, merchandise_cents, credit_cents, shipping_cents, total_cents, payment_rail, status from orders where deleted_at is null order by id`;
     const header = "date,order,merchandise,credit,shipping,collected,rail,status";
     const lines = rows.map(
       (r) =>
