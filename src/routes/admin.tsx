@@ -136,6 +136,31 @@ function ProductsBlock({
   onSave: () => void;
 }) {
   const [openId, setOpenId] = useState<number | null>(null);
+  const [togglingId, setTogglingId] = useState<number | null>(null);
+
+  async function toggleListed(p: Product, active: boolean) {
+    setTogglingId(p.id);
+    try {
+      await adminSaveProduct({
+        data: {
+          id: p.id,
+          name: p.name,
+          sizeLabel: p.sizeLabel,
+          category: p.category === "bac_water" ? "bac_water" : "peptide",
+          priceDollars: (p.priceCents / 100).toFixed(2),
+          stock: p.stock,
+          coaUrl: p.coaUrl,
+          active,
+        },
+      });
+      toast.success(active ? "Listed on shop" : "Hidden from shop");
+      onSave();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not update listing.");
+    } finally {
+      setTogglingId(null);
+    }
+  }
 
   return (
     <section className="mt-10">
@@ -149,20 +174,34 @@ function ProductsBlock({
           const banner = `${p.name}${sizePart} · ${cents(p.priceCents)} · ${p.stock} in stock`;
           return (
             <li key={p.id} className="py-2">
-              <button
-                type="button"
-                className="flex w-full items-center gap-2 py-2 text-left text-sm"
-                aria-expanded={open}
-                onClick={() => setOpenId(open ? null : p.id)}
-              >
-                <ChevronRight
-                  className={`size-4 shrink-0 text-muted transition-transform duration-150 ${
-                    open ? "rotate-90" : ""
-                  }`}
-                  aria-hidden
-                />
-                <span className="min-w-0 flex-1 truncate font-medium text-fg">{banner}</span>
-              </button>
+              <div className="flex items-center gap-2 py-2 text-sm">
+                <button
+                  type="button"
+                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                  aria-expanded={open}
+                  onClick={() => setOpenId(open ? null : p.id)}
+                >
+                  <ChevronRight
+                    className={`size-4 shrink-0 text-muted transition-transform duration-150 ${
+                      open ? "rotate-90" : ""
+                    }`}
+                    aria-hidden
+                  />
+                  <span className="min-w-0 flex-1 truncate font-medium text-fg">{banner}</span>
+                </button>
+                <label
+                  className="flex shrink-0 items-center gap-2 text-muted"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <input
+                    type="checkbox"
+                    checked={p.active}
+                    disabled={togglingId === p.id}
+                    onChange={(e) => void toggleListed(p, e.target.checked)}
+                  />
+                  Listed
+                </label>
+              </div>
               {open ? (
                 <div className="pb-4 pl-6">
                   <ProductForm product={p} onSave={onSave} />
