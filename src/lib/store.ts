@@ -95,6 +95,10 @@ async function ensureProfile(
 
   if (existing[0]) {
     const p = existing[0];
+    if (!p.membership_paid_at) {
+      await sql`update profiles set membership_paid_at = now() where user_id = ${userId} and membership_paid_at is null`;
+      p.membership_paid_at = new Date().toISOString();
+    }
     return {
       userId: p.user_id,
       email: p.email,
@@ -108,12 +112,12 @@ async function ensureProfile(
   const admins = await sql<{ c: number }>`select count(*)::int as c from profiles where is_admin = true`;
   const isAdmin = (admins[0]?.c ?? 0) === 0;
   const mail = email ?? "";
-  await sql`insert into profiles (user_id, email, is_admin) values (${userId}, ${mail}, ${isAdmin})`;
+  await sql`insert into profiles (user_id, email, is_admin, membership_paid_at) values (${userId}, ${mail}, ${isAdmin}, now())`;
   return {
     userId,
     email: mail,
     isAdmin,
-    member: false,
+    member: true,
     creditCents: 0,
     legalAcceptedAt: null,
   };
@@ -416,6 +420,33 @@ export const acceptLegal = createServerFn({ method: "POST" })
     await ensureProfile(context.userId, null);
     await sql`update profiles set legal_accepted_at = now() where user_id = ${context.userId}`;
     return { ok: true };
+  });
+
+
+export const getTurnstileSiteKey = createServerFn({ method: "GET" }).handler(async () => {
+  return { siteKey: process.env.TURNSTILE_SITE_KEY?.trim() ?? "" };
+});
+
+export const verifyTurnstile = createServerFn({ method: "POST" })
+  .validator(z.object({ token: z.string().trim().min(1).max(2048) }))
+  .handler(async ({ data }) => {
+    const secret = process.env.TURNSTILE_SECRET_KEY?.trim() ?? "";
+    if (!secret) {
+      throw new Error("Turnstile is not configured on the server.");
+    }
+    const body = new URLSearchParams();
+    body.set("secret", secret);
+    body.set("response", data.token);
+    const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+    });
+    const json = (await res.json()) as { success?: boolean };
+    if (!json.success) {
+      throw new Error("Turnstile verification failed. Try again.");
+    }
+    return { ok: true as const };
   });
 
 export const payMembership = createServerFn({ method: "POST" })

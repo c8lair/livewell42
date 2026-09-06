@@ -5,7 +5,6 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import {
   acceptLegal,
   getBootstrap,
-  payMembership,
   placeOrder,
   type Me,
   type Product,
@@ -37,7 +36,7 @@ function Gate() {
       <p className="font-display text-sm tracking-[0.28em] text-muted uppercase">Livewell42</p>
       <h1 className="mt-4 font-display text-5xl leading-none tracking-tight">Members</h1>
       <p className="mt-5 max-w-sm text-sm leading-relaxed text-muted">
-        Access is by referral. Membership is $5, once. That amount is credited on your first order.
+        Access is by referral. Create an account or sign in to continue.
       </p>
       <div className="mt-10 flex flex-col gap-3 sm:flex-row">
         <Link
@@ -127,10 +126,8 @@ function MemberApp() {
       </header>
       {!me.legalAcceptedAt ? (
         <LegalGate onAccepted={() => void refresh()} />
-      ) : me.member || me.isAdmin ? (
-        <Shop me={me} settings={settings} products={products} onPaid={() => void refresh()} />
       ) : (
-        <Paywall settings={settings} onPaid={() => void refresh()} />
+        <Shop me={me} settings={settings} products={products} onPaid={() => void refresh()} />
       )}
     </div>
   );
@@ -178,51 +175,6 @@ function LegalGate({ onAccepted }: { onAccepted: () => void }) {
   );
 }
 
-function Paywall({
-  settings,
-  onPaid,
-}: {
-  settings: PublicSettings;
-  onPaid: () => void;
-}) {
-  const [rail, setRail] = useState<Rail>("card");
-  const [busy, setBusy] = useState(false);
-
-  async function pay() {
-    setBusy(true);
-    try {
-      const res = await payMembership({ data: { rail } });
-      if (res && "checkoutUrl" in res && res.checkoutUrl) {
-        try {
-          const id = "nexapayOrderId" in res ? String(res.nexapayOrderId ?? "") : "";
-          if (id) sessionStorage.setItem("lw42_np", id);
-        } catch { /* ignore */ }
-        window.location.href = res.checkoutUrl;
-        return;
-      }
-      toast.success("$5 membership paid. $5 credit waits on your first order.");
-      onPaid();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Payment failed.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <section className="mx-auto max-w-md px-5 py-8">
-      <h2 className="font-display text-3xl">Complete membership</h2>
-      <p className="mt-3 text-sm leading-relaxed text-muted">
-        One-time $5. Credited in full on your first order so it breaks even when you buy.
-        Card payments settle to us in USDC via NexaPay. Crypto is Bitcoin only.
-      </p>
-      <RailPicker value={rail} onChange={setRail} settings={settings} amountLabel="$5.00" />
-      <Button className="mt-6 w-full" disabled={busy} onClick={() => void pay()}>
-        {busy ? "Confirming…" : "Pay $5 membership"}
-      </Button>
-    </section>
-  );
-}
 
 function Shop({
   me,
