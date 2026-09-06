@@ -441,6 +441,7 @@ function SettingsBlock({
   const [nexapay, setNexapay] = useState(settings.nexapay_api_key);
   const [usdc, setUsdc] = useState(settings.usdc_wallet);
   const [btc, setBtc] = useState(settings.btc_wallet);
+  const [btcEnabled, setBtcEnabled] = useState(Boolean(settings.btc_enabled));
   const [bannerEnabled, setBannerEnabled] = useState(Boolean(settings.banner_enabled));
   const [bannerText, setBannerText] = useState(settings.banner_text ?? "");
 
@@ -498,6 +499,20 @@ function SettingsBlock({
         <Label>USDC settle wallet (NexaPay payout)</Label>
         <Input value={usdc} onChange={(e) => setUsdc(e.target.value)} />
       </div>
+      <label className="flex items-start gap-2 text-sm text-muted">
+        <input
+          type="checkbox"
+          className="mt-1"
+          checked={btcEnabled}
+          onChange={(e) => setBtcEnabled(e.target.checked)}
+        />
+        <span>
+          Show Bitcoin payments
+          <span className="mt-0.5 block text-xs text-faint">
+            Off by default. Turn on only if NexaPay is down. Card stays the primary rail.
+          </span>
+        </span>
+      </label>
       <div>
         <Label>BTC receive address</Label>
         <Input value={btc} onChange={(e) => setBtc(e.target.value)} />
@@ -517,6 +532,7 @@ function SettingsBlock({
                 btcWallet: btc,
                 bannerEnabled,
                 bannerText,
+                btcEnabled,
               },
             });
             toast.success("Settings saved");

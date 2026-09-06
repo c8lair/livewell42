@@ -27,6 +27,7 @@ export type PublicSettings = {
   nexapayConfigured: boolean;
   bannerEnabled: boolean;
   bannerText: string;
+  btcEnabled: boolean;
 };
 
 export type Me = {
@@ -61,6 +62,7 @@ type SettingsRow = {
   btc_wallet: string;
   banner_enabled: boolean;
   banner_text: string;
+  btc_enabled: boolean;
 };
 
 function mapProduct(r: ProductRow): Product {
@@ -119,7 +121,7 @@ async function ensureProfile(
 
 async function loadSettings(): Promise<SettingsRow> {
   const sql = await getSql();
-  const rows = await sql<SettingsRow>`select store_name, support_email, owner_email, shipping_cents, free_shipping_at_cents, nexapay_api_key, usdc_wallet, btc_wallet, banner_enabled, banner_text from store_settings where id = 1`;
+  const rows = await sql<SettingsRow>`select store_name, support_email, owner_email, shipping_cents, free_shipping_at_cents, nexapay_api_key, usdc_wallet, btc_wallet, banner_enabled, banner_text, btc_enabled from store_settings where id = 1`;
   const r = rows[0];
   if (!r) {
     await sql`insert into store_settings (id, store_name) values (1, 'Livewell42') on conflict (id) do nothing`;
@@ -134,6 +136,7 @@ async function loadSettings(): Promise<SettingsRow> {
       btc_wallet: "",
       banner_enabled: false,
       banner_text: "",
+      btc_enabled: false,
     };
   }
   if (r.store_name === "Alder") {
@@ -154,6 +157,7 @@ function publicize(s: SettingsRow): PublicSettings {
     nexapayConfigured: Boolean(s.nexapay_api_key),
     bannerEnabled: Boolean(s.banner_enabled),
     bannerText: s.banner_text ?? "",
+    btcEnabled: Boolean(s.btc_enabled),
   };
 }
 
@@ -428,6 +432,10 @@ export const payMembership = createServerFn({ method: "POST" })
     const sql = await getSql();
     const settings = await loadSettings();
 
+    if (data.rail === "btc" && !settings.btc_enabled) {
+      throw new Error("Bitcoin checkout is disabled.");
+    }
+
     if (data.rail === "btc") {
       await sql`update profiles set membership_paid_at = now(), credit_cents = 500 where user_id = ${context.userId} and membership_paid_at is null`;
       const to = me.email || settings.owner_email;
@@ -491,6 +499,10 @@ export const placeOrder = createServerFn({ method: "POST" })
     if (!me.member && !me.isAdmin) throw new Error("Membership required.");
     const sql = await getSql();
     const settings = await loadSettings();
+
+    if (data.rail === "btc" && !settings.btc_enabled) {
+      throw new Error("Bitcoin checkout is disabled.");
+    }
 
     const ids = data.items.map((i) => i.productId);
     const products = await sql<ProductRow>`select id, name, size_label, category, price_cents, stock, coa_url, active, sort_order from products`;
@@ -761,6 +773,7 @@ export const adminSaveSettings = createServerFn({ method: "POST" })
       btcWallet: z.string().trim().max(200),
       bannerEnabled: z.boolean(),
       bannerText: z.string().trim().max(280),
+      btcEnabled: z.boolean(),
     }),
   )
   .middleware([authMiddleware])
@@ -779,7 +792,8 @@ export const adminSaveSettings = createServerFn({ method: "POST" })
       usdc_wallet = ${data.usdcWallet},
       btc_wallet = ${data.btcWallet},
       banner_enabled = ${data.bannerEnabled},
-      banner_text = ${data.bannerText}
+      banner_text = ${data.bannerText},
+      btc_enabled = ${data.btcEnabled}
       where id = 1`;
     return { ok: true };
   });
