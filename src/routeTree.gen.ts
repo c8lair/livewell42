@@ -13,7 +13,9 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as SignupRouteImport } from './routes/signup'
+import { Route as CheckoutSuccessRouteImport } from './routes/checkout/success'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiNexapayWebhookRouteImport } from './routes/api/nexapay/webhook'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -35,9 +37,19 @@ const SignupRoute = SignupRouteImport.update({
   path: '/signup',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CheckoutSuccessRoute = CheckoutSuccessRouteImport.update({
+  id: '/checkout/success',
+  path: '/checkout/success',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiNexapayWebhookRoute = ApiNexapayWebhookRouteImport.update({
+  id: '/api/nexapay/webhook',
+  path: '/api/nexapay/webhook',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -46,14 +58,18 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
+  '/checkout/success': typeof CheckoutSuccessRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/nexapay/webhook': typeof ApiNexapayWebhookRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
+  '/checkout/success': typeof CheckoutSuccessRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/nexapay/webhook': typeof ApiNexapayWebhookRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -61,14 +77,38 @@ export interface FileRoutesById {
   '/admin': typeof AdminRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
+  '/checkout/success': typeof CheckoutSuccessRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/nexapay/webhook': typeof ApiNexapayWebhookRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/admin' | '/login' | '/signup' | '/api/auth/$'
+  fullPaths:
+    | '/'
+    | '/admin'
+    | '/login'
+    | '/signup'
+    | '/checkout/success'
+    | '/api/auth/$'
+    | '/api/nexapay/webhook'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/login' | '/signup' | '/api/auth/$'
-  id: '__root__' | '/' | '/admin' | '/login' | '/signup' | '/api/auth/$'
+  to:
+    | '/'
+    | '/admin'
+    | '/login'
+    | '/signup'
+    | '/checkout/success'
+    | '/api/auth/$'
+    | '/api/nexapay/webhook'
+  id:
+    | '__root__'
+    | '/'
+    | '/admin'
+    | '/login'
+    | '/signup'
+    | '/checkout/success'
+    | '/api/auth/$'
+    | '/api/nexapay/webhook'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -76,7 +116,9 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRoute
   LoginRoute: typeof LoginRoute
   SignupRoute: typeof SignupRoute
+  CheckoutSuccessRoute: typeof CheckoutSuccessRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiNexapayWebhookRoute: typeof ApiNexapayWebhookRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -109,11 +151,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SignupRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/checkout/success': {
+      id: '/checkout/success'
+      path: '/checkout/success'
+      fullPath: '/checkout/success'
+      preLoaderRoute: typeof CheckoutSuccessRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
       fullPath: '/api/auth/$'
       preLoaderRoute: typeof ApiAuthSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/nexapay/webhook': {
+      id: '/api/nexapay/webhook'
+      path: '/api/nexapay/webhook'
+      fullPath: '/api/nexapay/webhook'
+      preLoaderRoute: typeof ApiNexapayWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -124,7 +180,9 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRoute,
   LoginRoute: LoginRoute,
   SignupRoute: SignupRoute,
+  CheckoutSuccessRoute: CheckoutSuccessRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiNexapayWebhookRoute: ApiNexapayWebhookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

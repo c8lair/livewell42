@@ -168,6 +168,227 @@ async function queueMail(
   await sql`insert into mail_log (kind, to_email, subject, body) values (${kind}, ${to}, ${subject}, ${body})`;
 }
 
+
+const SITE_ORIGIN = "https://livewell42.com";
+
+function nexaUrls(npRef: string) {
+  return {
+    success_url: `${SITE_ORIGIN}/checkout/success?np=${encodeURIComponent(npRef)}`,
+    cancel_url: `${SITE_ORIGIN}/checkout/success?cancelled=1`,
+    callback_url: `${SITE_ORIGIN}/api/nexapay/webhook`,
+  };
+}
+
+function newClientRef() {
+  return `lw_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+type FinalizeResult =
+  | { ok: true; kind: "membership" | "order"; already?: boolean }
+  | { ok: false; status: string; reason: string };
+
+async function findSessionByNp(np: string) {
+  const sql = await getSql();
+  const byNexa = await sql<{
+    id: number;
+    kind: string;
+    user_id: string;
+    order_id: number | null;
+    status: string;
+    amount_cents: number;
+    nexapay_order_id: string;
+    client_ref: string;
+  }>`select id, kind, user_id, order_id, status, amount_cents, nexapay_order_id, client_ref from nexapay_sessions where nexapay_order_id = ${np} or client_ref = ${np} limit 1`;
+  return byNexa[0] ?? null;
+}
+
+/**
+ * Idempotent finalize after NexaPay reports completed.
+ * Safe to call from success page and webhook. `np` may be nexapay order_id or our client_ref.
+ */
+export async function finalizePayment(np: string): Promise<FinalizeResult> {
+  const sql = await getSql();
+  const settings = await loadSettings();
+  if (!settings.nexapay_api_key) {
+    return { ok: false, status: "error", reason: "NexaPay API key missing." };
+  }
+
+  const session = await findSessionByNp(np);
+  const nexapayOrderId = session?.nexapay_order_id ?? np;
+
+  const { getPayment } = await import("@/lib/nexapay.server");
+  const payment = await getPayment(settings.nexapay_api_key, nexapayOrderId);
+  const status = String(payment.status ?? "").toLowerCase();
+  if (status !== "completed") {
+    return {
+      ok: false,
+      status: status || "unknown",
+      reason:
+        status === "cancelled" || status === "canceled"
+          ? "Payment was cancelled."
+          : `Payment is not completed (status: ${status || "unknown"}).`,
+    };
+  }
+
+  if (!session) {
+    const orders = await sql<{
+      id: number;
+      user_id: string;
+      status: string;
+    }>`select id, user_id, status from orders where payment_ref = ${nexapayOrderId}`;
+    const order = orders[0];
+    if (!order) {
+      return {
+        ok: false,
+        status: "missing",
+        reason: "No matching NexaPay session or order found.",
+      };
+    }
+    if (order.status !== "pending") {
+      return { ok: true, kind: "order", already: true };
+    }
+    await finalizeOrderPaid(order.id, order.user_id);
+    return { ok: true, kind: "order", already: false };
+  }
+
+  if (session.status === "completed") {
+    return {
+      ok: true,
+      kind: session.kind as "membership" | "order",
+      already: true,
+    };
+  }
+
+  if (session.kind === "membership") {
+    const profiles = await sql<{
+      membership_paid_at: string | null;
+      email: string;
+    }>`select membership_paid_at, email from profiles where user_id = ${session.user_id}`;
+    const profile = profiles[0];
+    if (profile?.membership_paid_at) {
+      await sql`update nexapay_sessions set status = 'completed' where id = ${session.id}`;
+      return { ok: true, kind: "membership", already: true };
+    }
+    await sql`update profiles set membership_paid_at = now(), credit_cents = 500 where user_id = ${session.user_id} and membership_paid_at is null`;
+    const email = profile?.email ?? "";
+    const to = email || settings.owner_email;
+    await queueMail(
+      "membership",
+      settings.owner_email || to,
+      "New Livewell42 membership",
+      `Member ${email || session.user_id} paid $5 via card (NexaPay ${nexapayOrderId}). Credit of $5 will apply to their first order.`,
+    );
+    await sql`update nexapay_sessions set status = 'completed' where id = ${session.id}`;
+    return { ok: true, kind: "membership", already: false };
+  }
+
+  const orderId = session.order_id;
+  if (!orderId) {
+    return {
+      ok: false,
+      status: "error",
+      reason: "NexaPay session missing order_id.",
+    };
+  }
+  const orders = await sql<{ status: string; user_id: string }>`
+    select status, user_id from orders where id = ${orderId}`;
+  const order = orders[0];
+  if (!order) {
+    return { ok: false, status: "missing", reason: "Order not found." };
+  }
+  if (order.status !== "pending") {
+    await sql`update nexapay_sessions set status = 'completed' where id = ${session.id}`;
+    return { ok: true, kind: "order", already: true };
+  }
+  await finalizeOrderPaid(orderId, order.user_id);
+  await sql`update nexapay_sessions set status = 'completed' where id = ${session.id}`;
+  return { ok: true, kind: "order", already: false };
+}
+
+async function finalizeOrderPaid(orderId: number, userId: string) {
+  const sql = await getSql();
+  const settings = await loadSettings();
+  const orders = await sql<{
+    id: number;
+    user_id: string;
+    status: string;
+    order_number: string;
+    credit_cents: number;
+    merchandise_cents: number;
+    shipping_cents: number;
+    total_cents: number;
+    ship_name: string;
+    ship_street: string;
+    ship_city: string;
+    ship_state: string;
+    ship_zip: string;
+    payment_rail: string;
+  }>`select id, user_id, status, order_number, credit_cents, merchandise_cents, shipping_cents, total_cents, ship_name, ship_street, ship_city, ship_state, ship_zip, payment_rail from orders where id = ${orderId}`;
+  const order = orders[0];
+  if (!order || order.status !== "pending") return;
+
+  const updated = await sql<{ id: number }>`update orders set status = 'paid' where id = ${orderId} and status = 'pending' returning id`;
+  if (!updated[0]) return;
+
+  const items = await sql<{
+    product_id: number | null;
+    name: string;
+    size_label: string;
+    qty: number;
+    price_cents: number;
+  }>`select product_id, name, size_label, qty, price_cents from order_items where order_id = ${orderId}`;
+
+  for (const item of items) {
+    if (item.product_id != null) {
+      await sql`update products set stock = stock - ${item.qty} where id = ${item.product_id}`;
+    }
+  }
+
+  if (order.credit_cents > 0) {
+    await sql`update profiles set credit_cents = 0 where user_id = ${userId} and credit_cents > 0`;
+  }
+
+  const profiles = await sql<{ email: string }>`select email from profiles where user_id = ${userId}`;
+  const email = profiles[0]?.email ?? "";
+  const itemLines = items
+    .map((l) => `${l.qty} × ${l.name} ${l.size_label}`)
+    .join("\n");
+  const money = (n: number) => `${(n / 100).toFixed(2)}`;
+  const body = [
+    `Order ${order.order_number}`,
+    itemLines,
+    `Ship to: ${order.ship_name}, ${order.ship_street}, ${order.ship_city}, ${order.ship_state} ${order.ship_zip}`,
+    `Merchandise ${money(order.merchandise_cents)}`,
+    order.credit_cents ? `Membership credit -${money(order.credit_cents)}` : null,
+    `Shipping ${order.shipping_cents === 0 ? "FREE" : money(order.shipping_cents)}`,
+    `Collected ${money(order.total_cents)} via ${order.payment_rail}`,
+    `For laboratory research use only. Not for human consumption.`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  await queueMail(
+    "order-owner",
+    settings.owner_email || email,
+    `Livewell42 order ${order.order_number}`,
+    body,
+  );
+  if (email) {
+    await queueMail(
+      "order-customer",
+      email,
+      `Livewell42 receipt ${order.order_number}`,
+      body,
+    );
+  }
+}
+
+export const confirmNexaPayPayment = createServerFn({ method: "POST" })
+  .validator(z.object({ orderId: z.string().trim().min(1).max(200) }))
+  .handler(async ({ data }) => {
+    return finalizePayment(data.orderId);
+  });
+
 export const getBootstrap = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
@@ -205,16 +426,45 @@ export const payMembership = createServerFn({ method: "POST" })
     if (!me.legalAcceptedAt) throw new Error("Confirm the sign-in statements first.");
     if (me.member) return { ok: true, already: true };
     const sql = await getSql();
-    await sql`update profiles set membership_paid_at = now(), credit_cents = 500 where user_id = ${context.userId} and membership_paid_at is null`;
     const settings = await loadSettings();
-    const to = me.email || settings.owner_email;
-    await queueMail(
-      "membership",
-      settings.owner_email || to,
-      "New Livewell42 membership",
-      `Member ${me.email || context.userId} paid $5 via ${data.rail}. Credit of $5 will apply to their first order.`,
-    );
-    return { ok: true, already: false };
+
+    if (data.rail === "btc") {
+      await sql`update profiles set membership_paid_at = now(), credit_cents = 500 where user_id = ${context.userId} and membership_paid_at is null`;
+      const to = me.email || settings.owner_email;
+      await queueMail(
+        "membership",
+        settings.owner_email || to,
+        "New Livewell42 membership",
+        `Member ${me.email || context.userId} paid $5 via btc. Credit of $5 will apply to their first order.`,
+      );
+      return { ok: true, already: false };
+    }
+
+    if (!settings.nexapay_api_key) {
+      throw new Error(
+        "NexaPay API key is not configured. Add it in Admin → Settings before taking card payments.",
+      );
+    }
+
+    const clientRef = newClientRef();
+    const urls = nexaUrls(clientRef);
+    const { createPayment } = await import("@/lib/nexapay.server");
+    const payment = await createPayment(settings.nexapay_api_key, {
+      amount: 5,
+      currency: "USD",
+      crypto: "USDC",
+      description: `livewell42:membership:${context.userId}`,
+      customer_email: me.email || settings.support_email || "member@livewell42.com",
+      success_url: urls.success_url,
+      cancel_url: urls.cancel_url,
+      callback_url: urls.callback_url,
+    });
+
+    await sql`insert into nexapay_sessions (kind, user_id, order_id, nexapay_order_id, client_ref, amount_cents, status)
+      values ('membership', ${context.userId}, null, ${payment.order_id}, ${clientRef}, 500, 'pending')
+      on conflict (nexapay_order_id) do nothing`;
+
+    return { checkoutUrl: payment.checkout_url, nexapayOrderId: payment.order_id };
   });
 
 const checkoutSchema = z.object({
@@ -267,50 +517,96 @@ export const placeOrder = createServerFn({ method: "POST" })
     const seq = await sql<{ c: number }>`select count(*)::int as c from orders`;
     const orderNumber = `LW42-${String(1001 + (seq[0]?.c ?? 0))}`;
 
+    if (data.rail === "btc") {
+      const inserted = await sql<{ id: number }>`
+        insert into orders (
+          user_id, order_number, merchandise_cents, credit_cents, shipping_cents, total_cents,
+          status, ship_name, ship_street, ship_city, ship_state, ship_zip, payment_rail, payment_ref
+        ) values (
+          ${context.userId}, ${orderNumber}, ${merchandise}, ${credit}, ${ship}, ${total},
+          'paid', ${data.shipName}, ${data.shipStreet}, ${data.shipCity}, ${data.shipState}, ${data.shipZip},
+          ${data.rail}, ${`demo-${Date.now()}`}
+        ) returning id`;
+      const orderId = inserted[0].id;
+
+      for (const line of lines) {
+        await sql`insert into order_items (order_id, product_id, name, size_label, qty, price_cents)
+          values (${orderId}, ${line.product.id}, ${line.product.name}, ${line.product.size_label}, ${line.qty}, ${line.product.price_cents})`;
+        await sql`update products set stock = stock - ${line.qty} where id = ${line.product.id}`;
+      }
+
+      if (credit > 0) {
+        await sql`update profiles set credit_cents = 0 where user_id = ${context.userId}`;
+      }
+
+      const itemLines = lines
+        .map((l) => `${l.qty} × ${l.product.name} ${l.product.size_label}`)
+        .join("\n");
+      const money = (n: number) => `$${(n / 100).toFixed(2)}`;
+      const body = [
+        `Order ${orderNumber}`,
+        itemLines,
+        `Ship to: ${data.shipName}, ${data.shipStreet}, ${data.shipCity}, ${data.shipState} ${data.shipZip}`,
+        `Merchandise ${money(merchandise)}`,
+        credit ? `Membership credit -${money(credit)}` : null,
+        `Shipping ${ship === 0 ? "FREE" : money(ship)}`,
+        `Collected ${money(total)} via ${data.rail}`,
+        `For laboratory research use only. Not for human consumption.`,
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      await queueMail("order-owner", settings.owner_email || me.email, `Livewell42 order ${orderNumber}`, body);
+      if (me.email) {
+        await queueMail("order-customer", me.email, `Livewell42 receipt ${orderNumber}`, body);
+      }
+
+      return { orderNumber, totalCents: total };
+    }
+
+    // Card → NexaPay: pending until finalize
+    if (!settings.nexapay_api_key) {
+      throw new Error(
+        "NexaPay API key is not configured. Add it in Admin → Settings before taking card payments.",
+      );
+    }
+
     const inserted = await sql<{ id: number }>`
       insert into orders (
         user_id, order_number, merchandise_cents, credit_cents, shipping_cents, total_cents,
         status, ship_name, ship_street, ship_city, ship_state, ship_zip, payment_rail, payment_ref
       ) values (
         ${context.userId}, ${orderNumber}, ${merchandise}, ${credit}, ${ship}, ${total},
-        'paid', ${data.shipName}, ${data.shipStreet}, ${data.shipCity}, ${data.shipState}, ${data.shipZip},
-        ${data.rail}, ${`demo-${Date.now()}`}
+        'pending', ${data.shipName}, ${data.shipStreet}, ${data.shipCity}, ${data.shipState}, ${data.shipZip},
+        'card', ''
       ) returning id`;
     const orderId = inserted[0].id;
 
     for (const line of lines) {
       await sql`insert into order_items (order_id, product_id, name, size_label, qty, price_cents)
         values (${orderId}, ${line.product.id}, ${line.product.name}, ${line.product.size_label}, ${line.qty}, ${line.product.price_cents})`;
-      await sql`update products set stock = stock - ${line.qty} where id = ${line.product.id}`;
     }
 
-    if (credit > 0) {
-      await sql`update profiles set credit_cents = 0 where user_id = ${context.userId}`;
-    }
+    const clientRef = newClientRef();
+    const urls = nexaUrls(clientRef);
+    const { createPayment } = await import("@/lib/nexapay.server");
+    const payment = await createPayment(settings.nexapay_api_key, {
+      amount: total / 100,
+      currency: "USD",
+      crypto: "USDC",
+      description: `livewell42:order:${orderNumber}`,
+      customer_email: me.email || settings.support_email || "member@livewell42.com",
+      success_url: urls.success_url,
+      cancel_url: urls.cancel_url,
+      callback_url: urls.callback_url,
+    });
 
-    const itemLines = lines
-      .map((l) => `${l.qty} × ${l.product.name} ${l.product.size_label}`)
-      .join("\n");
-    const money = (n: number) => `$${(n / 100).toFixed(2)}`;
-    const body = [
-      `Order ${orderNumber}`,
-      itemLines,
-      `Ship to: ${data.shipName}, ${data.shipStreet}, ${data.shipCity}, ${data.shipState} ${data.shipZip}`,
-      `Merchandise ${money(merchandise)}`,
-      credit ? `Membership credit -${money(credit)}` : null,
-      `Shipping ${ship === 0 ? "FREE" : money(ship)}`,
-      `Collected ${money(total)} via ${data.rail}`,
-      `For laboratory research use only. Not for human consumption.`,
-    ]
-      .filter(Boolean)
-      .join("\n");
+    await sql`update orders set payment_ref = ${payment.order_id} where id = ${orderId}`;
+    await sql`insert into nexapay_sessions (kind, user_id, order_id, nexapay_order_id, client_ref, amount_cents, status)
+      values ('order', ${context.userId}, ${orderId}, ${payment.order_id}, ${clientRef}, ${total}, 'pending')
+      on conflict (nexapay_order_id) do nothing`;
 
-    await queueMail("order-owner", settings.owner_email || me.email, `Livewell42 order ${orderNumber}`, body);
-    if (me.email) {
-      await queueMail("order-customer", me.email, `Livewell42 receipt ${orderNumber}`, body);
-    }
-
-    return { orderNumber, totalCents: total };
+    return { checkoutUrl: payment.checkout_url, nexapayOrderId: payment.order_id, orderNumber, totalCents: total };
   });
 
 export const listMyOrders = createServerFn({ method: "GET" })

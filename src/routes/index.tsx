@@ -191,7 +191,15 @@ function Paywall({
   async function pay() {
     setBusy(true);
     try {
-      await payMembership({ data: { rail } });
+      const res = await payMembership({ data: { rail } });
+      if (res && "checkoutUrl" in res && res.checkoutUrl) {
+        try {
+          const id = "nexapayOrderId" in res ? String(res.nexapayOrderId ?? "") : "";
+          if (id) sessionStorage.setItem("lw42_np", id);
+        } catch { /* ignore */ }
+        window.location.href = res.checkoutUrl;
+        return;
+      }
       toast.success("$5 membership paid. $5 credit waits on your first order.");
       onPaid();
     } catch (err) {
@@ -267,6 +275,14 @@ function Shop({
           rail,
         },
       });
+      if (res && "checkoutUrl" in res && res.checkoutUrl) {
+        try {
+          const id = "nexapayOrderId" in res ? String(res.nexapayOrderId ?? "") : "";
+          if (id) sessionStorage.setItem("lw42_np", id);
+        } catch { /* ignore */ }
+        window.location.href = res.checkoutUrl;
+        return;
+      }
       toast.success(`Order ${res.orderNumber} paid · ${cents(res.totalCents)}`);
       setQty({});
       onPaid();
@@ -480,7 +496,7 @@ function RailPicker({
       </div>
       <p className="text-xs leading-relaxed text-faint">
         {value === "card"
-          ? "NexaPay checkout. In this preview, confirm to record a paid membership or order. Paste live API keys in admin before going live."
+          ? "Redirects to NexaPay secure checkout. We receive settlement in USDC. API key required in Admin → Settings."
           : addr
             ? `Send exactly ${amountLabel} on the correct network to ${addr}`
             : `${selected.hint}. Confirm after sending — admin can mark paid if chain watch is not connected.`}

@@ -356,8 +356,45 @@ function OrderStatus({
   order: Awaited<ReturnType<typeof adminGet>>["orders"][number];
   onSave: () => void;
 }) {
-  const [status, setStatus] = useState(order.status as "paid" | "packed" | "shipped" | "reshipped");
+  const isPending = order.status === "pending";
+  const [status, setStatus] = useState(
+    (isPending ? "paid" : order.status) as "paid" | "packed" | "shipped" | "reshipped",
+  );
   const [tracking, setTracking] = useState(order.tracking);
+
+  if (isPending) {
+    return (
+      <div className="mt-3 space-y-2">
+        <p className="rounded-md border border-border bg-raised px-3 py-2 text-xs text-muted">
+          Status: <span className="font-medium text-fg">Pending</span> (awaiting NexaPay card payment)
+        </p>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Select value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
+            <option value="paid">Paid</option>
+            <option value="packed">Packed</option>
+            <option value="shipped">Shipped</option>
+            <option value="reshipped">Reshipped</option>
+          </Select>
+          <Input
+            placeholder="Tracking"
+            value={tracking}
+            onChange={(e) => setTracking(e.target.value)}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            onClick={async () => {
+              await adminUpdateOrder({ data: { id: order.id, status, tracking } });
+              toast.success("Order updated");
+              onSave();
+            }}
+          >
+            Save
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mt-3 flex flex-col gap-2 sm:flex-row">
