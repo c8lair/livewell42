@@ -457,12 +457,12 @@ function ProductGroup({
 
 function CardRailMarks() {
   const pill =
-    "inline-flex h-[22px] w-[34px] shrink-0 items-center justify-center rounded-md border border-border/70 bg-black/40 px-1";
+    "inline-flex h-[44px] w-[68px] shrink-0 items-center justify-center rounded-md border border-border/70 bg-black/40 px-1.5";
   return (
-    <div className="mt-2 flex flex-wrap items-center gap-1.5" aria-hidden>
+    <div className="flex flex-wrap items-center justify-end gap-1.5" aria-hidden>
       {/* Visa — blue wordmark */}
       <span className={pill} title="Visa">
-        <svg width={28} height={18} viewBox="0 0 48 32" role="img">
+        <svg width={56} height={36} viewBox="0 0 48 32" role="img">
           <title>Visa</title>
           <rect width="48" height="32" rx="4" fill="#1A1F71" />
           <text
@@ -481,7 +481,7 @@ function CardRailMarks() {
       </span>
       {/* Mastercard — overlapping circles */}
       <span className={pill} title="Mastercard">
-        <svg width={28} height={18} viewBox="0 0 38 24" role="img">
+        <svg width={56} height={36} viewBox="0 0 38 24" role="img">
           <title>Mastercard</title>
           <circle cx="14" cy="12" r="10" fill="#EB001B" />
           <circle cx="24" cy="12" r="10" fill="#F79E1B" />
@@ -494,7 +494,7 @@ function CardRailMarks() {
       </span>
       {/* Apple Pay */}
       <span className={pill} title="Apple Pay">
-        <svg width={28} height={18} viewBox="0 0 44 18" role="img">
+        <svg width={56} height={36} viewBox="0 0 44 18" role="img">
           <title>Apple Pay</title>
           <path
             fill="#E8E8ED"
@@ -515,7 +515,7 @@ function CardRailMarks() {
       </span>
       {/* Google Pay */}
       <span className={pill} title="Google Pay">
-        <svg width={28} height={18} viewBox="0 0 48 18" role="img">
+        <svg width={56} height={36} viewBox="0 0 48 18" role="img">
           <title>Google Pay</title>
           {/* Multicolor G */}
           <path
@@ -596,8 +596,14 @@ function RailPicker({
               effective === r.id ? "border-accent bg-raised text-fg" : "border-border text-muted"
             }`}
           >
-            <span className="block">{r.label}</span>
-            {r.id === "card" ? <CardRailMarks /> : null}
+            {r.id === "card" ? (
+              <span className="flex w-full items-center justify-between gap-3">
+                <span className="shrink-0">{r.label}</span>
+                <CardRailMarks />
+              </span>
+            ) : (
+              <span className="block">{r.label}</span>
+            )}
           </button>
         ))}
       </div>
