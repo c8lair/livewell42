@@ -541,70 +541,49 @@ function RailPicker({
   const btcOn = Boolean(settings.btcEnabled);
 
   useEffect(() => {
-    if (!cardOn && btcOn && value === "card") onChange("btc");
-    if (!btcOn && cardOn && value === "btc") onChange("card");
+    if (cardOn && (!btcOn || value !== "btc")) {
+      if (value !== "card") onChange("card");
+      return;
+    }
+    if (!cardOn && btcOn && value !== "btc") onChange("btc");
   }, [cardOn, btcOn, value, onChange]);
 
-  const rails: { id: Rail; label: string; hint: string }[] = [];
-  if (cardOn) {
-    rails.push({
-      id: "card",
-      label: "Card (NexaPay)",
-      hint: "Visa, Mastercard, Apple Pay, Google Pay",
-    });
-  }
-  if (btcOn) {
-    rails.push({ id: "btc", label: "Bitcoin", hint: settings.btcWallet || "Address set in admin" });
-  }
-
-  const effective: Rail =
-    cardOn && (!btcOn || value === "card")
-      ? "card"
-      : btcOn
-        ? "btc"
-        : "card";
-  const selected = rails.find((r) => r.id === effective);
+  const effective: Rail = cardOn && (!btcOn || value !== "btc") ? "card" : btcOn ? "btc" : "card";
   const addr = effective === "btc" ? settings.btcWallet : "";
 
   return (
-    <div className="mt-4 space-y-2">
+    <div className="mt-4 space-y-3">
       <p className="text-xs text-muted">Pay {amountLabel}</p>
-      {!cardOn ? (
-        <p className="text-sm text-muted">Card checkout is temporarily off.</p>
-      ) : null}
-      {rails.length === 0 ? (
-        <p className="text-sm text-muted">No payment methods are available right now.</p>
-      ) : (
-        <div className={`grid gap-2 ${rails.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
-          {rails.map((r) => (
-            <button
-              key={r.id}
-              type="button"
-              onClick={() => onChange(r.id)}
-              className={`rounded-md border px-3 py-3 text-left text-sm ${
-                effective === r.id ? "border-accent bg-raised text-fg" : "border-border text-muted"
-              }`}
-            >
-              {r.id === "card" ? (
-                <span className="flex w-full items-center justify-between gap-3">
-                  <span className="shrink-0">{r.label}</span>
-                  <CardRailMarks />
-                </span>
-              ) : (
-                <span className="block">{r.label}</span>
-              )}
-            </button>
-          ))}
+      {cardOn ? (
+        <div className="space-y-1.5">
+          <CardRailMarks />
+          <p className="text-xs leading-relaxed text-faint">
+            Visa, Mastercard, Apple Pay, Google Pay
+          </p>
         </div>
+      ) : (
+        <p className="text-sm text-muted">Card checkout is temporarily off.</p>
       )}
-      {selected ? (
+      {btcOn ? (
+        <button
+          type="button"
+          onClick={() => onChange("btc")}
+          className={`w-full rounded-md border px-3 py-3 text-left text-sm sm:max-w-xs ${
+            effective === "btc" ? "border-accent bg-raised text-fg" : "border-border text-muted"
+          }`}
+        >
+          Bitcoin
+        </button>
+      ) : null}
+      {effective === "btc" ? (
         <p className="text-xs leading-relaxed text-faint">
-          {effective === "card"
-            ? selected.hint
-            : addr
-              ? `Send exactly ${amountLabel} on the correct network to ${addr}`
-              : `${selected.hint}. Confirm after sending — admin can mark paid if chain watch is not connected.`}
+          {addr
+            ? `Send exactly ${amountLabel} on the correct network to ${addr}`
+            : "Address set in admin. Confirm after sending — admin can mark paid if chain watch is not connected."}
         </p>
+      ) : null}
+      {!cardOn && !btcOn ? (
+        <p className="text-sm text-muted">No payment methods are available right now.</p>
       ) : null}
     </div>
   );
