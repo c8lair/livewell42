@@ -434,7 +434,7 @@ function CardRailMarks() {
   const pill =
     "inline-flex h-[44px] w-[68px] shrink-0 items-center justify-center rounded-md border border-border/70 bg-black/40 px-1.5";
   return (
-    <div className="flex flex-wrap items-center justify-end gap-1.5" aria-hidden>
+    <div className="flex flex-wrap items-center gap-1.5" aria-hidden>
       {/* Visa — blue wordmark */}
       <span className={pill} title="Visa">
         <svg width={56} height={36} viewBox="0 0 48 32" role="img">
