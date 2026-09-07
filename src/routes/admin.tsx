@@ -508,6 +508,12 @@ function SettingsBlock({
   const [freeAt, setFreeAt] = useState((settings.free_shipping_at_cents / 100).toFixed(2));
   const [nexapay, setNexapay] = useState(settings.nexapay_api_key);
   const [nexapayWebhookSecret, setNexapayWebhookSecret] = useState("");
+  const [webhookSecretConfigured, setWebhookSecretConfigured] = useState(
+    nexapayWebhookSecretConfigured,
+  );
+  useEffect(() => {
+    setWebhookSecretConfigured(nexapayWebhookSecretConfigured);
+  }, [nexapayWebhookSecretConfigured]);
   const [usdc, setUsdc] = useState(settings.usdc_wallet);
   const [btc, setBtc] = useState(settings.btc_wallet);
   const [btcEnabled, setBtcEnabled] = useState(Boolean(settings.btc_enabled));
@@ -584,12 +590,12 @@ function SettingsBlock({
           autoComplete="new-password"
           value={nexapayWebhookSecret}
           onChange={(e) => setNexapayWebhookSecret(e.target.value)}
-          placeholder={nexapayWebhookSecretConfigured ? "•••••••• (saved — leave blank to keep)" : "Paste webhook secret"}
+          placeholder={webhookSecretConfigured ? "•••••••• (saved — leave blank to keep)" : "Paste webhook secret"}
         />
       </div>
       <p className="text-sm text-muted">
         Webhook secret:{" "}
-        {nexapayWebhookSecretConfigured ? "configured" : "missing"}
+        {webhookSecretConfigured ? "configured" : "missing"}
       </p>
       <div>
         <Label>USDC settle wallet (NexaPay payout)</Label>
@@ -616,26 +622,31 @@ function SettingsBlock({
       <div className="flex flex-wrap gap-3">
         <Button
           onClick={async () => {
-            await adminSaveSettings({
-              data: {
-                storeName,
-                supportEmail,
-                ownerEmail,
-                shippingDollars: ship,
-                freeAtDollars: freeAt,
-                nexapayApiKey: nexapay,
-                nexapayWebhookSecret,
-                usdcWallet: usdc,
-                btcWallet: btc,
-                bannerEnabled,
-                bannerText,
-                btcEnabled,
-                nexapayEnabled,
-              },
-            });
-            setNexapayWebhookSecret("");
-            toast.success("Settings saved");
-            onSave();
+            try {
+              const res = await adminSaveSettings({
+                data: {
+                  storeName,
+                  supportEmail,
+                  ownerEmail,
+                  shippingDollars: ship,
+                  freeAtDollars: freeAt,
+                  nexapayApiKey: nexapay,
+                  nexapayWebhookSecret,
+                  usdcWallet: usdc,
+                  btcWallet: btc,
+                  bannerEnabled,
+                  bannerText,
+                  btcEnabled,
+                  nexapayEnabled,
+                },
+              });
+              setNexapayWebhookSecret("");
+              setWebhookSecretConfigured(Boolean(res.nexapayWebhookSecretConfigured));
+              toast.success("Settings saved");
+              onSave();
+            } catch (err) {
+              toast.error(err instanceof Error ? err.message : "Could not save settings.");
+            }
           }}
         >
           Save settings

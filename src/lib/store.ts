@@ -856,8 +856,7 @@ export const adminGet = createServerFn({ method: "GET" })
     return {
       settings,
       nexapayWebhookSecretConfigured: Boolean(
-        loaded.nexapay_webhook_secret?.trim() ||
-          process.env.NEXAPAY_WEBHOOK_SECRET?.trim(),
+        (loaded.nexapay_webhook_secret ?? "").trim(),
       ),
       products: products.map(mapProduct),
       orders,
@@ -905,7 +904,7 @@ export const adminSaveSettings = createServerFn({ method: "POST" })
       shippingDollars: z.string().trim(),
       freeAtDollars: z.string().trim(),
       nexapayApiKey: z.string().trim().max(200),
-      nexapayWebhookSecret: z.string().max(500).optional(),
+      nexapayWebhookSecret: z.string().max(500).default(""),
       usdcWallet: z.string().trim().max(200),
       btcWallet: z.string().trim().max(200),
       bannerEnabled: z.boolean(),
@@ -920,47 +919,38 @@ export const adminSaveSettings = createServerFn({ method: "POST" })
     const shipping = Math.round(Number(data.shippingDollars) * 100);
     const freeAt = Math.round(Number(data.freeAtDollars) * 100);
     const sql = await getSql();
-    const webhookSecret = (data.nexapayWebhookSecret ?? "").trim();
-    const baseUpdate = async () => {
-      await sql`update store_settings set
-        store_name = ${data.storeName},
-        support_email = ${data.supportEmail},
-        owner_email = ${data.ownerEmail},
-        shipping_cents = ${shipping},
-        free_shipping_at_cents = ${freeAt},
-        nexapay_api_key = ${data.nexapayApiKey},
-        usdc_wallet = ${data.usdcWallet},
-        btc_wallet = ${data.btcWallet},
-        banner_enabled = ${data.bannerEnabled},
-        banner_text = ${data.bannerText},
-        btc_enabled = ${data.btcEnabled},
-        nexapay_enabled = ${data.nexapayEnabled}
-        where id = 1`;
-    };
+
+    // Make sure the column exists before writing (safe if already present).
+    await sql.query(
+      "alter table store_settings add column if not exists nexapay_webhook_secret text",
+    );
+
+    await sql`update store_settings set
+      store_name = ${data.storeName},
+      support_email = ${data.supportEmail},
+      owner_email = ${data.ownerEmail},
+      shipping_cents = ${shipping},
+      free_shipping_at_cents = ${freeAt},
+      nexapay_api_key = ${data.nexapayApiKey},
+      usdc_wallet = ${data.usdcWallet},
+      btc_wallet = ${data.btcWallet},
+      banner_enabled = ${data.bannerEnabled},
+      banner_text = ${data.bannerText},
+      btc_enabled = ${data.btcEnabled},
+      nexapay_enabled = ${data.nexapayEnabled}
+      where id = 1`;
+
+    const webhookSecret = String(data.nexapayWebhookSecret ?? "").trim();
     if (webhookSecret) {
-      try {
-        await sql`update store_settings set
-          store_name = ${data.storeName},
-          support_email = ${data.supportEmail},
-          owner_email = ${data.ownerEmail},
-          shipping_cents = ${shipping},
-          free_shipping_at_cents = ${freeAt},
-          nexapay_api_key = ${data.nexapayApiKey},
-          nexapay_webhook_secret = ${webhookSecret},
-          usdc_wallet = ${data.usdcWallet},
-          btc_wallet = ${data.btcWallet},
-          banner_enabled = ${data.bannerEnabled},
-          banner_text = ${data.bannerText},
-          btc_enabled = ${data.btcEnabled},
-          nexapay_enabled = ${data.nexapayEnabled}
-          where id = 1`;
-      } catch {
-        await baseUpdate();
-      }
-    } else {
-      await baseUpdate();
+      await sql`update store_settings set nexapay_webhook_secret = ${webhookSecret} where id = 1`;
     }
-    return { ok: true };
+
+    const check = await sql<{ nexapay_webhook_secret: string | null }>`
+      select nexapay_webhook_secret from store_settings where id = 1`;
+    const nexapayWebhookSecretConfigured = Boolean(
+      (check[0]?.nexapay_webhook_secret ?? "").trim(),
+    );
+    return { ok: true as const, nexapayWebhookSecretConfigured };
   });
 
 export const adminUpdateOrder = createServerFn({ method: "POST" })
