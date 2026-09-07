@@ -149,9 +149,24 @@ export async function getPayment(
   };
 }
 
+function safeEqualHexOrUtf8(provided: string, expectedHex: string): boolean {
+  try {
+    const a = Buffer.from(provided, "hex");
+    const b = Buffer.from(expectedHex, "hex");
+    if (a.length === b.length && a.length > 0) return timingSafeEqual(a, b);
+  } catch {
+    /* not hex */
+  }
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expectedHex);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+
 /**
- * Verify X-NexaPay-Signature over `timestamp + '.' + rawBody` with
- * NEXAPAY_WEBHOOK_SECRET. Signature may be prefixed with `sha256=`.
+ * Verify X-NexaPay-Signature as HMAC-SHA256 of the raw body.
+ * If X-NexaPay-Timestamp is present, also accept HMAC of `timestamp + '.' + rawBody`.
+ * Signature may be prefixed with `sha256=`.
  */
 export function verifyWebhookSignature(
   rawBody: string,
@@ -159,21 +174,16 @@ export function verifyWebhookSignature(
   timestampHeader: string | null,
   secret: string,
 ): boolean {
-  if (!secret || !signatureHeader || !timestampHeader) return false;
+  if (!secret || !signatureHeader) return false;
   const provided = signatureHeader.trim().replace(/^sha256=/i, "");
-  const expected = createHmac("sha256", secret)
-    .update(`${timestampHeader}.${rawBody}`)
-    .digest("hex");
-  try {
-    const a = Buffer.from(provided, "hex");
-    const b = Buffer.from(expected, "hex");
-    if (a.length !== b.length) return false;
-    return timingSafeEqual(a, b);
-  } catch {
-    // Fallback if provided is not hex (compare utf8 strings safely)
-    const a = Buffer.from(provided);
-    const b = Buffer.from(expected);
-    if (a.length !== b.length) return false;
-    return timingSafeEqual(a, b);
+  const bodyMac = createHmac("sha256", secret).update(rawBody).digest("hex");
+  if (safeEqualHexOrUtf8(provided, bodyMac)) return true;
+  const ts = timestampHeader?.trim();
+  if (ts) {
+    const stamped = createHmac("sha256", secret)
+      .update(`${ts}.${rawBody}`)
+      .digest("hex");
+    if (safeEqualHexOrUtf8(provided, stamped)) return true;
   }
+  return false;
 }

@@ -127,9 +127,19 @@ async function ensureProfile(
 }
 
 export async function getNexapayWebhookSecret(): Promise<string> {
-  const settings = await loadSettings();
-  const fromDb = settings.nexapay_webhook_secret?.trim() ?? "";
-  if (fromDb) return fromDb;
+  try {
+    const sql = await getSql();
+    try {
+      const rows = await sql<{ nexapay_webhook_secret: string | null }>`
+        select nexapay_webhook_secret from store_settings where id = 1`;
+      const fromDb = (rows[0]?.nexapay_webhook_secret ?? "").trim();
+      if (fromDb) return fromDb;
+    } catch {
+      /* column missing or DB blip — fall through to env */
+    }
+  } catch {
+    /* ignore */
+  }
   return process.env.NEXAPAY_WEBHOOK_SECRET?.trim() ?? "";
 }
 
