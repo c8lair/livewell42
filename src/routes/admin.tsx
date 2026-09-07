@@ -589,9 +589,7 @@ function SettingsBlock({
       </div>
       <p className="text-sm text-muted">
         Webhook secret:{" "}
-        {nexapayWebhookSecretConfigured || nexapayWebhookSecret.trim()
-          ? "configured"
-          : "missing"}
+        {nexapayWebhookSecretConfigured ? "configured" : "missing"}
       </p>
       <div>
         <Label>USDC settle wallet (NexaPay payout)</Label>
