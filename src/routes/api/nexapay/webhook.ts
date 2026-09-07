@@ -1,12 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { finalizePayment } from "@/lib/store";
+import { finalizePayment, getNexapayWebhookSecret } from "@/lib/store";
 import { verifyWebhookSignature } from "@/lib/nexapay.server";
 
 export const Route = createFileRoute("/api/nexapay/webhook")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const secret = process.env.NEXAPAY_WEBHOOK_SECRET ?? "";
+        const secret = await getNexapayWebhookSecret();
         const rawBody = await request.text();
         const signature =
           request.headers.get("X-NexaPay-Signature") ??

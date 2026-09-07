@@ -59,6 +59,7 @@ type SettingsRow = {
   shipping_cents: number;
   free_shipping_at_cents: number;
   nexapay_api_key: string;
+  nexapay_webhook_secret: string;
   usdc_wallet: string;
   btc_wallet: string;
   banner_enabled: boolean;
@@ -125,9 +126,17 @@ async function ensureProfile(
   };
 }
 
+export async function getNexapayWebhookSecret(): Promise<string> {
+  const settings = await loadSettings();
+  const fromDb = settings.nexapay_webhook_secret?.trim() ?? "";
+  if (fromDb) return fromDb;
+  return process.env.NEXAPAY_WEBHOOK_SECRET?.trim() ?? "";
+}
+
 async function loadSettings(): Promise<SettingsRow> {
+
   const sql = await getSql();
-  const rows = await sql<SettingsRow>`select store_name, support_email, owner_email, shipping_cents, free_shipping_at_cents, nexapay_api_key, usdc_wallet, btc_wallet, banner_enabled, banner_text, btc_enabled, nexapay_enabled from store_settings where id = 1`;
+  const rows = await sql<SettingsRow>`select store_name, support_email, owner_email, shipping_cents, free_shipping_at_cents, nexapay_api_key, nexapay_webhook_secret, usdc_wallet, btc_wallet, banner_enabled, banner_text, btc_enabled, nexapay_enabled from store_settings where id = 1`;
   const r = rows[0];
   if (!r) {
     await sql`insert into store_settings (id, store_name) values (1, 'Livewell42') on conflict (id) do nothing`;
@@ -138,6 +147,7 @@ async function loadSettings(): Promise<SettingsRow> {
       shipping_cents: 1500,
       free_shipping_at_cents: 25000,
       nexapay_api_key: "",
+      nexapay_webhook_secret: "",
       usdc_wallet: "",
       btc_wallet: "",
       banner_enabled: false,
@@ -755,7 +765,8 @@ export const adminGet = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     await requireAdmin(context.userId);
     const sql = await getSql();
-    const settings = await loadSettings();
+    const loaded = await loadSettings();
+    const settings = { ...loaded, nexapay_webhook_secret: "" };
     const products = await sql<ProductRow>`select id, name, size_label, category, price_cents, stock, coa_url, active, sort_order from products order by lower(name), id`;
     const orderCols = {
       id: 0 as number,
@@ -811,7 +822,8 @@ export const adminGet = createServerFn({ method: "GET" })
     return {
       settings,
       nexapayWebhookSecretConfigured: Boolean(
-        process.env.NEXAPAY_WEBHOOK_SECRET?.trim(),
+        loaded.nexapay_webhook_secret?.trim() ||
+          process.env.NEXAPAY_WEBHOOK_SECRET?.trim(),
       ),
       products: products.map(mapProduct),
       orders,
@@ -859,6 +871,7 @@ export const adminSaveSettings = createServerFn({ method: "POST" })
       shippingDollars: z.string().trim(),
       freeAtDollars: z.string().trim(),
       nexapayApiKey: z.string().trim().max(200),
+      nexapayWebhookSecret: z.string().max(500).optional(),
       usdcWallet: z.string().trim().max(200),
       btcWallet: z.string().trim().max(200),
       bannerEnabled: z.boolean(),
@@ -873,20 +886,39 @@ export const adminSaveSettings = createServerFn({ method: "POST" })
     const shipping = Math.round(Number(data.shippingDollars) * 100);
     const freeAt = Math.round(Number(data.freeAtDollars) * 100);
     const sql = await getSql();
-    await sql`update store_settings set
-      store_name = ${data.storeName},
-      support_email = ${data.supportEmail},
-      owner_email = ${data.ownerEmail},
-      shipping_cents = ${shipping},
-      free_shipping_at_cents = ${freeAt},
-      nexapay_api_key = ${data.nexapayApiKey},
-      usdc_wallet = ${data.usdcWallet},
-      btc_wallet = ${data.btcWallet},
-      banner_enabled = ${data.bannerEnabled},
-      banner_text = ${data.bannerText},
-      btc_enabled = ${data.btcEnabled},
-      nexapay_enabled = ${data.nexapayEnabled}
-      where id = 1`;
+    const webhookSecret = (data.nexapayWebhookSecret ?? "").trim();
+    if (webhookSecret) {
+      await sql`update store_settings set
+        store_name = ${data.storeName},
+        support_email = ${data.supportEmail},
+        owner_email = ${data.ownerEmail},
+        shipping_cents = ${shipping},
+        free_shipping_at_cents = ${freeAt},
+        nexapay_api_key = ${data.nexapayApiKey},
+        nexapay_webhook_secret = ${webhookSecret},
+        usdc_wallet = ${data.usdcWallet},
+        btc_wallet = ${data.btcWallet},
+        banner_enabled = ${data.bannerEnabled},
+        banner_text = ${data.bannerText},
+        btc_enabled = ${data.btcEnabled},
+        nexapay_enabled = ${data.nexapayEnabled}
+        where id = 1`;
+    } else {
+      await sql`update store_settings set
+        store_name = ${data.storeName},
+        support_email = ${data.supportEmail},
+        owner_email = ${data.ownerEmail},
+        shipping_cents = ${shipping},
+        free_shipping_at_cents = ${freeAt},
+        nexapay_api_key = ${data.nexapayApiKey},
+        usdc_wallet = ${data.usdcWallet},
+        btc_wallet = ${data.btcWallet},
+        banner_enabled = ${data.bannerEnabled},
+        banner_text = ${data.bannerText},
+        btc_enabled = ${data.btcEnabled},
+        nexapay_enabled = ${data.nexapayEnabled}
+        where id = 1`;
+    }
     return { ok: true };
   });
 

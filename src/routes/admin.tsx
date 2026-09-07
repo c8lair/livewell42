@@ -507,6 +507,7 @@ function SettingsBlock({
   const [ship, setShip] = useState((settings.shipping_cents / 100).toFixed(2));
   const [freeAt, setFreeAt] = useState((settings.free_shipping_at_cents / 100).toFixed(2));
   const [nexapay, setNexapay] = useState(settings.nexapay_api_key);
+  const [nexapayWebhookSecret, setNexapayWebhookSecret] = useState("");
   const [usdc, setUsdc] = useState(settings.usdc_wallet);
   const [btc, setBtc] = useState(settings.btc_wallet);
   const [btcEnabled, setBtcEnabled] = useState(Boolean(settings.btc_enabled));
@@ -576,9 +577,21 @@ function SettingsBlock({
         <Label>NexaPay API key</Label>
         <Input value={nexapay} onChange={(e) => setNexapay(e.target.value)} />
       </div>
+      <div>
+        <Label>NexaPay webhook secret</Label>
+        <Input
+          type="password"
+          autoComplete="new-password"
+          value={nexapayWebhookSecret}
+          onChange={(e) => setNexapayWebhookSecret(e.target.value)}
+          placeholder={nexapayWebhookSecretConfigured ? "•••••••• (saved — leave blank to keep)" : "Paste webhook secret"}
+        />
+      </div>
       <p className="text-sm text-muted">
         Webhook secret:{" "}
-        {nexapayWebhookSecretConfigured ? "configured" : "missing"}
+        {nexapayWebhookSecretConfigured || nexapayWebhookSecret.trim()
+          ? "configured"
+          : "missing"}
       </p>
       <div>
         <Label>USDC settle wallet (NexaPay payout)</Label>
@@ -613,6 +626,7 @@ function SettingsBlock({
                 shippingDollars: ship,
                 freeAtDollars: freeAt,
                 nexapayApiKey: nexapay,
+                nexapayWebhookSecret,
                 usdcWallet: usdc,
                 btcWallet: btc,
                 bannerEnabled,
@@ -621,6 +635,7 @@ function SettingsBlock({
                 nexapayEnabled,
               },
             });
+            setNexapayWebhookSecret("");
             toast.success("Settings saved");
             onSave();
           }}
