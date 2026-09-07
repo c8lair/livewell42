@@ -134,32 +134,66 @@ export async function getNexapayWebhookSecret(): Promise<string> {
 }
 
 async function loadSettings(): Promise<SettingsRow> {
-
   const sql = await getSql();
-  const rows = await sql<SettingsRow>`select store_name, support_email, owner_email, shipping_cents, free_shipping_at_cents, nexapay_api_key, nexapay_webhook_secret, usdc_wallet, btc_wallet, banner_enabled, banner_text, btc_enabled, nexapay_enabled from store_settings where id = 1`;
-  const r = rows[0];
+  const empty: SettingsRow = {
+    store_name: "Livewell42",
+    support_email: "support@example.com",
+    owner_email: "",
+    shipping_cents: 1500,
+    free_shipping_at_cents: 25000,
+    nexapay_api_key: "",
+    nexapay_webhook_secret: "",
+    usdc_wallet: "",
+    btc_wallet: "",
+    banner_enabled: false,
+    banner_text: "",
+    btc_enabled: false,
+    nexapay_enabled: true,
+  };
+
+  type Row = SettingsRow;
+  let r: Row | undefined;
+  try {
+    const rows = await sql<Row>`select store_name, support_email, owner_email, shipping_cents, free_shipping_at_cents, nexapay_api_key, nexapay_webhook_secret, usdc_wallet, btc_wallet, banner_enabled, banner_text, btc_enabled, nexapay_enabled from store_settings where id = 1`;
+    r = rows[0];
+  } catch {
+    // Column may be missing before migration 0010 applies — keep Admin/shop up.
+    try {
+      const rows = await sql<{
+        store_name: string;
+        support_email: string;
+        owner_email: string;
+        shipping_cents: number;
+        free_shipping_at_cents: number;
+        nexapay_api_key: string;
+        usdc_wallet: string;
+        btc_wallet: string;
+        banner_enabled: boolean;
+        banner_text: string;
+        btc_enabled: boolean;
+        nexapay_enabled: boolean;
+      }>`select store_name, support_email, owner_email, shipping_cents, free_shipping_at_cents, nexapay_api_key, usdc_wallet, btc_wallet, banner_enabled, banner_text, btc_enabled, nexapay_enabled from store_settings where id = 1`;
+      r = rows[0]
+        ? { ...rows[0], nexapay_webhook_secret: "" }
+        : undefined;
+    } catch {
+      r = undefined;
+    }
+  }
+
   if (!r) {
-    await sql`insert into store_settings (id, store_name) values (1, 'Livewell42') on conflict (id) do nothing`;
-    return {
-      store_name: "Livewell42",
-      support_email: "support@example.com",
-      owner_email: "",
-      shipping_cents: 1500,
-      free_shipping_at_cents: 25000,
-      nexapay_api_key: "",
-      nexapay_webhook_secret: "",
-      usdc_wallet: "",
-      btc_wallet: "",
-      banner_enabled: false,
-      banner_text: "",
-      btc_enabled: false,
-      nexapay_enabled: true,
-    };
+    try {
+      await sql`insert into store_settings (id, store_name) values (1, 'Livewell42') on conflict (id) do nothing`;
+    } catch {
+      /* ignore */
+    }
+    return empty;
   }
   if (r.store_name === "Alder") {
     await sql`update store_settings set store_name = 'Livewell42' where id = 1 and store_name = 'Alder'`;
     r.store_name = "Livewell42";
   }
+  r.nexapay_webhook_secret = r.nexapay_webhook_secret ?? "";
   return r;
 }
 
@@ -887,37 +921,44 @@ export const adminSaveSettings = createServerFn({ method: "POST" })
     const freeAt = Math.round(Number(data.freeAtDollars) * 100);
     const sql = await getSql();
     const webhookSecret = (data.nexapayWebhookSecret ?? "").trim();
+    const baseUpdate = async () => {
+      await sql`update store_settings set
+        store_name = ${data.storeName},
+        support_email = ${data.supportEmail},
+        owner_email = ${data.ownerEmail},
+        shipping_cents = ${shipping},
+        free_shipping_at_cents = ${freeAt},
+        nexapay_api_key = ${data.nexapayApiKey},
+        usdc_wallet = ${data.usdcWallet},
+        btc_wallet = ${data.btcWallet},
+        banner_enabled = ${data.bannerEnabled},
+        banner_text = ${data.bannerText},
+        btc_enabled = ${data.btcEnabled},
+        nexapay_enabled = ${data.nexapayEnabled}
+        where id = 1`;
+    };
     if (webhookSecret) {
-      await sql`update store_settings set
-        store_name = ${data.storeName},
-        support_email = ${data.supportEmail},
-        owner_email = ${data.ownerEmail},
-        shipping_cents = ${shipping},
-        free_shipping_at_cents = ${freeAt},
-        nexapay_api_key = ${data.nexapayApiKey},
-        nexapay_webhook_secret = ${webhookSecret},
-        usdc_wallet = ${data.usdcWallet},
-        btc_wallet = ${data.btcWallet},
-        banner_enabled = ${data.bannerEnabled},
-        banner_text = ${data.bannerText},
-        btc_enabled = ${data.btcEnabled},
-        nexapay_enabled = ${data.nexapayEnabled}
-        where id = 1`;
+      try {
+        await sql`update store_settings set
+          store_name = ${data.storeName},
+          support_email = ${data.supportEmail},
+          owner_email = ${data.ownerEmail},
+          shipping_cents = ${shipping},
+          free_shipping_at_cents = ${freeAt},
+          nexapay_api_key = ${data.nexapayApiKey},
+          nexapay_webhook_secret = ${webhookSecret},
+          usdc_wallet = ${data.usdcWallet},
+          btc_wallet = ${data.btcWallet},
+          banner_enabled = ${data.bannerEnabled},
+          banner_text = ${data.bannerText},
+          btc_enabled = ${data.btcEnabled},
+          nexapay_enabled = ${data.nexapayEnabled}
+          where id = 1`;
+      } catch {
+        await baseUpdate();
+      }
     } else {
-      await sql`update store_settings set
-        store_name = ${data.storeName},
-        support_email = ${data.supportEmail},
-        owner_email = ${data.ownerEmail},
-        shipping_cents = ${shipping},
-        free_shipping_at_cents = ${freeAt},
-        nexapay_api_key = ${data.nexapayApiKey},
-        usdc_wallet = ${data.usdcWallet},
-        btc_wallet = ${data.btcWallet},
-        banner_enabled = ${data.bannerEnabled},
-        banner_text = ${data.bannerText},
-        btc_enabled = ${data.btcEnabled},
-        nexapay_enabled = ${data.nexapayEnabled}
-        where id = 1`;
+      await baseUpdate();
     }
     return { ok: true };
   });
