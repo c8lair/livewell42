@@ -167,7 +167,11 @@ export default defineConfig(({ command, isPreview }) => ({
     grokPwaPlugin(),
     tailwindcss(),
     tanstackStart(),
-    nitro({  inlineDynamicImports: true,
+    nitro({
+      inlineDynamicImports: true,
+      // Nitro v3 defaults serverDir to false. Without this, server/middleware/*
+      // never registers — including grok-pwa.ts which serves /__grok/manifest.webmanifest.
+      serverDir: "./server",
     }),
     viteReact(),
   ],
