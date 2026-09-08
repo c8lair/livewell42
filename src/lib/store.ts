@@ -29,6 +29,9 @@ export type PublicSettings = {
   bannerEnabled: boolean;
   bannerText: string;
   btcEnabled: boolean;
+  /** Minimum order total (cents) for Bitcoin checkout. Never exposes zpub. */
+  btcMinCents: number;
+  btcTestnet: boolean;
 };
 
 export type Me = {
@@ -66,6 +69,10 @@ type SettingsRow = {
   banner_text: string;
   btc_enabled: boolean;
   nexapay_enabled: boolean;
+  btc_zpub: string;
+  btc_next_index: number;
+  btc_min_cents: number;
+  btc_testnet: boolean;
 };
 
 function mapProduct(r: ProductRow): Product {
@@ -159,12 +166,16 @@ async function loadSettings(): Promise<SettingsRow> {
     banner_text: "",
     btc_enabled: false,
     nexapay_enabled: true,
+    btc_zpub: "",
+    btc_next_index: 0,
+    btc_min_cents: 2500,
+    btc_testnet: false,
   };
 
   type Row = SettingsRow;
   let r: Row | undefined;
   try {
-    const rows = await sql<Row>`select store_name, support_email, owner_email, shipping_cents, free_shipping_at_cents, nexapay_api_key, nexapay_webhook_secret, usdc_wallet, btc_wallet, banner_enabled, banner_text, btc_enabled, nexapay_enabled from store_settings where id = 1`;
+    const rows = await sql<Row>`select store_name, support_email, owner_email, shipping_cents, free_shipping_at_cents, nexapay_api_key, nexapay_webhook_secret, usdc_wallet, btc_wallet, banner_enabled, banner_text, btc_enabled, nexapay_enabled, btc_zpub, btc_next_index, btc_min_cents, btc_testnet from store_settings where id = 1`;
     r = rows[0];
   } catch {
     // Column may be missing before migration 0010 applies — keep Admin/shop up.
@@ -184,7 +195,14 @@ async function loadSettings(): Promise<SettingsRow> {
         nexapay_enabled: boolean;
       }>`select store_name, support_email, owner_email, shipping_cents, free_shipping_at_cents, nexapay_api_key, usdc_wallet, btc_wallet, banner_enabled, banner_text, btc_enabled, nexapay_enabled from store_settings where id = 1`;
       r = rows[0]
-        ? { ...rows[0], nexapay_webhook_secret: "" }
+        ? {
+            ...rows[0],
+            nexapay_webhook_secret: "",
+            btc_zpub: "",
+            btc_next_index: 0,
+            btc_min_cents: 2500,
+            btc_testnet: false,
+          }
         : undefined;
     } catch {
       r = undefined;
@@ -204,6 +222,10 @@ async function loadSettings(): Promise<SettingsRow> {
     r.store_name = "Livewell42";
   }
   r.nexapay_webhook_secret = r.nexapay_webhook_secret ?? "";
+  r.btc_zpub = r.btc_zpub ?? "";
+  r.btc_next_index = r.btc_next_index ?? 0;
+  r.btc_min_cents = r.btc_min_cents ?? 2500;
+  r.btc_testnet = Boolean(r.btc_testnet);
   return r;
 }
 
@@ -220,7 +242,10 @@ function publicize(s: SettingsRow): PublicSettings {
     nexapayEnabled: Boolean(s.nexapay_enabled) && Boolean(s.nexapay_api_key?.trim()),
     bannerEnabled: Boolean(s.banner_enabled),
     bannerText: s.banner_text ?? "",
-    btcEnabled: Boolean(s.btc_enabled),
+    // Bitcoin is on only when enabled AND zpub is configured (never expose zpub).
+    btcEnabled: Boolean(s.btc_enabled) && Boolean(s.btc_zpub?.trim()),
+    btcMinCents: s.btc_min_cents ?? 2500,
+    btcTestnet: Boolean(s.btc_testnet),
   };
 }
 
@@ -669,50 +694,23 @@ export const placeOrder = createServerFn({ method: "POST" })
     const orderNumber = `LW42-${String(1001 + (seq[0]?.c ?? 0))}`;
 
     if (data.rail === "btc") {
-      const inserted = await sql<{ id: number }>`
-        insert into orders (
-          user_id, order_number, merchandise_cents, credit_cents, shipping_cents, total_cents,
-          status, ship_name, ship_street, ship_city, ship_state, ship_zip, payment_rail, payment_ref
-        ) values (
-          ${context.userId}, ${orderNumber}, ${merchandise}, ${credit}, ${ship}, ${total},
-          'paid', ${data.shipName}, ${data.shipStreet}, ${data.shipCity}, ${data.shipState}, ${data.shipZip},
-          ${data.rail}, ${`demo-${Date.now()}`}
-        ) returning id`;
-      const orderId = inserted[0].id;
-
-      for (const line of lines) {
-        await sql`insert into order_items (order_id, product_id, name, size_label, qty, price_cents)
-          values (${orderId}, ${line.product.id}, ${line.product.name}, ${line.product.size_label}, ${line.qty}, ${line.product.price_cents})`;
-        await sql`update products set stock = stock - ${line.qty} where id = ${line.product.id}`;
-      }
-
-      if (credit > 0) {
-        await sql`update profiles set credit_cents = 0 where user_id = ${context.userId}`;
-      }
-
-      const itemLines = lines
-        .map((l) => `${l.qty} × ${l.product.name} ${l.product.size_label}`)
-        .join("\n");
-      const money = (n: number) => `$${(n / 100).toFixed(2)}`;
-      const body = [
-        `Order ${orderNumber}`,
-        itemLines,
-        `Ship to: ${data.shipName}, ${data.shipStreet}, ${data.shipCity}, ${data.shipState} ${data.shipZip}`,
-        `Merchandise ${money(merchandise)}`,
-        credit ? `Membership credit -${money(credit)}` : null,
-        `Shipping ${ship === 0 ? "FREE" : money(ship)}`,
-        `Collected ${money(total)} via ${data.rail}`,
-        `For laboratory research use only. Not for human consumption.`,
-      ]
-        .filter(Boolean)
-        .join("\n");
-
-      await queueMail("order-owner", settings.owner_email || me.email, `Livewell42 order ${orderNumber}`, body);
-      if (me.email) {
-        await queueMail("order-customer", me.email, `Livewell42 receipt ${orderNumber}`, body);
-      }
-
-      return { orderNumber, totalCents: total };
+      const { createBtcProductOrder } = await import("@/lib/btc/checkout.server");
+      return createBtcProductOrder({
+        userId: context.userId,
+        email: me.email,
+        orderNumber,
+        merchandise,
+        credit,
+        ship,
+        total,
+        shipName: data.shipName,
+        shipStreet: data.shipStreet,
+        shipCity: data.shipCity,
+        shipState: data.shipState,
+        shipZip: data.shipZip,
+        lines,
+        ownerEmail: settings.owner_email,
+      });
     }
 
     // Card → NexaPay: pending until finalize
@@ -810,7 +808,13 @@ export const adminGet = createServerFn({ method: "GET" })
     await requireAdmin(context.userId);
     const sql = await getSql();
     const loaded = await loadSettings();
-    const settings = { ...loaded, nexapay_webhook_secret: "" };
+    // Never echo zpub or webhook secret to the admin client.
+    const settings = {
+      ...loaded,
+      nexapay_webhook_secret: "",
+      btc_zpub: "",
+      btc_next_index: 0, // never expose derivation cursor
+    };
     const products = await sql<ProductRow>`select id, name, size_label, category, price_cents, stock, coa_url, active, sort_order from products order by lower(name), id`;
     const orderCols = {
       id: 0 as number,
@@ -830,10 +834,24 @@ export const adminGet = createServerFn({ method: "GET" })
       tracking: "" as string,
       created_at: "" as string,
       deleted_at: null as string | null,
+      btc_status: null as string | null,
+      btc_amount: null as string | null,
+      btc_address: null as string | null,
+      btc_txid: "" as string,
+      btc_received: "" as string,
+      quote_expires_at: null as string | null,
+      payment_token: null as string | null,
     };
     type AdminOrderRow = typeof orderCols;
-    const orders = await sql<AdminOrderRow>`select id, order_number, user_id, merchandise_cents, credit_cents, shipping_cents, total_cents, status, ship_name, ship_street, ship_city, ship_state, ship_zip, payment_rail, tracking, created_at, deleted_at from orders where deleted_at is null order by id desc limit 200`;
-    const archivedOrders = await sql<AdminOrderRow>`select id, order_number, user_id, merchandise_cents, credit_cents, shipping_cents, total_cents, status, ship_name, ship_street, ship_city, ship_state, ship_zip, payment_rail, tracking, created_at, deleted_at from orders where deleted_at is not null order by deleted_at desc limit 200`;
+    let orders: AdminOrderRow[] = [];
+    let archivedOrders: AdminOrderRow[] = [];
+    try {
+      orders = await sql<AdminOrderRow>`select id, order_number, user_id, merchandise_cents, credit_cents, shipping_cents, total_cents, status, ship_name, ship_street, ship_city, ship_state, ship_zip, payment_rail, tracking, created_at, deleted_at, btc_status, btc_amount, btc_address, btc_txid, btc_received, quote_expires_at, payment_token from orders where deleted_at is null order by id desc limit 200`;
+      archivedOrders = await sql<AdminOrderRow>`select id, order_number, user_id, merchandise_cents, credit_cents, shipping_cents, total_cents, status, ship_name, ship_street, ship_city, ship_state, ship_zip, payment_rail, tracking, created_at, deleted_at, btc_status, btc_amount, btc_address, btc_txid, btc_received, quote_expires_at, payment_token from orders where deleted_at is not null order by deleted_at desc limit 200`;
+    } catch {
+      orders = await sql<AdminOrderRow>`select id, order_number, user_id, merchandise_cents, credit_cents, shipping_cents, total_cents, status, ship_name, ship_street, ship_city, ship_state, ship_zip, payment_rail, tracking, created_at, deleted_at from orders where deleted_at is null order by id desc limit 200`;
+      archivedOrders = await sql<AdminOrderRow>`select id, order_number, user_id, merchandise_cents, credit_cents, shipping_cents, total_cents, status, ship_name, ship_street, ship_city, ship_state, ship_zip, payment_rail, tracking, created_at, deleted_at from orders where deleted_at is not null order by deleted_at desc limit 200`;
+    }
     const items = await sql<{
       order_id: number;
       name: string;
@@ -863,11 +881,30 @@ export const adminGet = createServerFn({ method: "GET" })
       created_at: string;
       body: string;
     }>`select id, kind, to_email, subject, created_at, body from mail_log order by id desc limit 40`;
+    let unmatched: Array<{
+      id: number;
+      address: string;
+      txid: string;
+      amount: string;
+      confirmed: boolean;
+      created_at: string;
+      noted: boolean;
+    }> = [];
+    try {
+      unmatched = await sql`
+        select id, address, txid, amount, confirmed, created_at, noted
+        from btc_unmatched_payments
+        order by id desc limit 50`;
+    } catch {
+      unmatched = [];
+    }
+
     return {
       settings,
       nexapayWebhookSecretConfigured: Boolean(
         (loaded.nexapay_webhook_secret ?? "").trim(),
       ),
+      btcZpubConfigured: Boolean((loaded.btc_zpub ?? "").trim()),
       products: products.map(mapProduct),
       orders,
       archivedOrders,
@@ -875,6 +912,7 @@ export const adminGet = createServerFn({ method: "GET" })
       members,
       sales: sales[0] ?? { order_count: 0, ytd_cents: 0, mtd_cents: 0 },
       mail,
+      unmatchedBtc: unmatched,
     };
   });
 
@@ -921,6 +959,9 @@ export const adminSaveSettings = createServerFn({ method: "POST" })
       bannerText: z.string().trim().max(280),
       btcEnabled: z.boolean(),
       nexapayEnabled: z.boolean(),
+      btcZpub: z.string().max(200).default(""),
+      btcMinDollars: z.string().trim().default("25"),
+      btcTestnet: z.boolean().default(false),
     }),
   )
   .middleware([authMiddleware])
@@ -935,6 +976,21 @@ export const adminSaveSettings = createServerFn({ method: "POST" })
       "alter table store_settings add column if not exists nexapay_webhook_secret text",
     );
 
+    const btcMin = Math.round(Number(data.btcMinDollars) * 100);
+    if (!Number.isFinite(btcMin) || btcMin < 0) {
+      throw new Error("Invalid Bitcoin minimum.");
+    }
+
+    await sql.query(
+      "alter table store_settings add column if not exists btc_zpub text not null default ''",
+    );
+    await sql.query(
+      "alter table store_settings add column if not exists btc_min_cents integer not null default 2500",
+    );
+    await sql.query(
+      "alter table store_settings add column if not exists btc_testnet boolean not null default false",
+    );
+
     await sql`update store_settings set
       store_name = ${data.storeName},
       support_email = ${data.supportEmail},
@@ -947,7 +1003,9 @@ export const adminSaveSettings = createServerFn({ method: "POST" })
       banner_enabled = ${data.bannerEnabled},
       banner_text = ${data.bannerText},
       btc_enabled = ${data.btcEnabled},
-      nexapay_enabled = ${data.nexapayEnabled}
+      nexapay_enabled = ${data.nexapayEnabled},
+      btc_min_cents = ${btcMin},
+      btc_testnet = ${data.btcTestnet}
       where id = 1`;
 
     const webhookSecret = String(data.nexapayWebhookSecret ?? "").trim();
@@ -955,12 +1013,28 @@ export const adminSaveSettings = createServerFn({ method: "POST" })
       await sql`update store_settings set nexapay_webhook_secret = ${webhookSecret} where id = 1`;
     }
 
-    const check = await sql<{ nexapay_webhook_secret: string | null }>`
-      select nexapay_webhook_secret from store_settings where id = 1`;
+    const zpub = String(data.btcZpub ?? "").trim();
+    if (zpub) {
+      // Validate by deriving index 0 (throws on bad key)
+      const { deriveAddress } = await import("@/lib/btc/zpub.server");
+      deriveAddress(zpub, 0, data.btcTestnet);
+      await sql`update store_settings set btc_zpub = ${zpub} where id = 1`;
+    }
+
+    const check = await sql<{
+      nexapay_webhook_secret: string | null;
+      btc_zpub: string | null;
+    }>`
+      select nexapay_webhook_secret, btc_zpub from store_settings where id = 1`;
     const nexapayWebhookSecretConfigured = Boolean(
       (check[0]?.nexapay_webhook_secret ?? "").trim(),
     );
-    return { ok: true as const, nexapayWebhookSecretConfigured };
+    const btcZpubConfigured = Boolean((check[0]?.btc_zpub ?? "").trim());
+    return {
+      ok: true as const,
+      nexapayWebhookSecretConfigured,
+      btcZpubConfigured,
+    };
   });
 
 export const adminUpdateOrder = createServerFn({ method: "POST" })
@@ -1037,3 +1111,14 @@ export const adminSalesCsv = createServerFn({ method: "GET" })
     );
     return [header, ...lines].join("\n");
   });
+
+
+/** Bitcoin payment page + admin BTC actions (server fns). */
+export {
+  getBtcPayment,
+  refreshBtcQuote,
+  adminCancelBtcQuote,
+  adminMarkBtcPaid,
+  adminNoteUnmatched,
+  type BtcPaymentView,
+} from "@/lib/btc/checkout.server";

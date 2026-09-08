@@ -252,7 +252,11 @@ function Shop({
         window.location.href = res.checkoutUrl;
         return;
       }
-      toast.success(`Order ${res.orderNumber} paid · ${cents(res.totalCents)}`);
+      if (res && "paymentUrl" in res && res.paymentUrl) {
+        window.location.href = res.paymentUrl as string;
+        return;
+      }
+      toast.success(`Order ${res.orderNumber} placed · ${cents(res.totalCents)}`);
       setQty({});
       onPaid();
     } catch (err) {
@@ -311,7 +315,7 @@ function Shop({
           <Label>ZIP</Label>
           <Input value={zip} onChange={(e) => setZip(e.target.value)} required />
         </div>
-        <RailPicker value={rail} onChange={setRail} settings={settings} amountLabel={cents(due)} />
+        <RailPicker value={rail} onChange={setRail} settings={settings} amountLabel={cents(due)} dueCents={due} />
       </section>
 
       <div className="pointer-events-none fixed inset-x-0 bottom-0 z-20 p-3">
@@ -328,7 +332,7 @@ function Shop({
                 Due {cents(due)}
               </p>
             </div>
-            <Button disabled={busy || merchandise === 0 || (!settings.nexapayEnabled && !settings.btcEnabled)} onClick={() => void checkout()}>
+            <Button disabled={busy || merchandise === 0 || (!settings.nexapayEnabled && !(settings.btcEnabled && due >= (settings.btcMinCents ?? 2500)))} onClick={() => void checkout()}>
               {busy ? "Placing…" : "Pay now"}
             </Button>
           </div>
@@ -531,14 +535,18 @@ function RailPicker({
   onChange,
   settings,
   amountLabel,
+  dueCents,
 }: {
   value: Rail;
   onChange: (r: Rail) => void;
   settings: PublicSettings;
   amountLabel: string;
+  dueCents: number;
 }) {
   const cardOn = Boolean(settings.nexapayEnabled);
-  const btcOn = Boolean(settings.btcEnabled);
+  const min = settings.btcMinCents ?? 2500;
+  const btcOn =
+    Boolean(settings.btcEnabled) && dueCents >= min;
 
   useEffect(() => {
     if (cardOn && (!btcOn || value !== "btc")) {
@@ -546,16 +554,24 @@ function RailPicker({
       return;
     }
     if (!cardOn && btcOn && value !== "btc") onChange("btc");
+    if (!btcOn && value === "btc" && cardOn) onChange("card");
   }, [cardOn, btcOn, value, onChange]);
 
-  const effective: Rail = cardOn && (!btcOn || value !== "btc") ? "card" : btcOn ? "btc" : "card";
-  const addr = effective === "btc" ? settings.btcWallet : "";
+  const effective: Rail =
+    cardOn && (!btcOn || value !== "btc") ? "card" : btcOn ? "btc" : "card";
 
   return (
     <div className="mt-4 space-y-3">
       <p className="text-xs text-muted">Pay {amountLabel}</p>
       {cardOn ? (
-        <div className="space-y-1.5">
+        <div
+          className={`space-y-1.5 ${btcOn ? "cursor-pointer rounded-md border border-transparent p-1" : ""} ${
+            effective === "card" && btcOn ? "border-accent bg-raised/40" : ""
+          }`}
+          onClick={btcOn ? () => onChange("card") : undefined}
+          onKeyDown={undefined}
+          role={btcOn ? "button" : undefined}
+        >
           <CardRailMarks />
           <p className="text-xs leading-relaxed text-faint">
             Visa, Mastercard, Apple Pay, Google Pay
@@ -572,14 +588,18 @@ function RailPicker({
             effective === "btc" ? "border-accent bg-raised text-fg" : "border-border text-muted"
           }`}
         >
-          Bitcoin
+          Pay with Bitcoin
         </button>
+      ) : settings.btcEnabled && dueCents > 0 && dueCents < min ? (
+        <p className="text-xs text-faint">
+          Bitcoin available for orders of {cents(min)} or more.
+        </p>
       ) : null}
       {effective === "btc" ? (
         <p className="text-xs leading-relaxed text-faint">
-          {addr
-            ? `Send exactly ${amountLabel} on the correct network to ${addr}`
-            : "Address set in admin. Confirm after sending — admin can mark paid if chain watch is not connected."}
+          You will get a 15-minute Bitcoin quote with a QR code. Payment confirms
+          after 1 on-chain confirmation.
+          {settings.btcTestnet ? " (Testnet mode is on.)" : ""}
         </p>
       ) : null}
       {!cardOn && !btcOn ? (

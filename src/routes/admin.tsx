@@ -10,6 +10,9 @@ import {
   adminSalesCsv,
   adminSoftDeleteOrder,
   adminUpdateOrder,
+  adminCancelBtcQuote,
+  adminMarkBtcPaid,
+  adminNoteUnmatched,
   repairOwnerAdmin,
   type Product,
 } from "@/lib/store";
@@ -125,7 +128,18 @@ function AdminPage() {
         items={data.items}
         onSave={() => void refresh()}
       />
-      <SettingsBlock settings={data.settings} nexapayWebhookSecretConfigured={data.nexapayWebhookSecretConfigured} onSave={() => void refresh()} />
+      <BitcoinOrdersBlock
+        orders={data.orders}
+        unmatched={data.unmatchedBtc ?? []}
+        testnet={Boolean(data.settings.btc_testnet)}
+        onSave={() => void refresh()}
+      />
+      <SettingsBlock
+        settings={data.settings}
+        nexapayWebhookSecretConfigured={data.nexapayWebhookSecretConfigured}
+        btcZpubConfigured={Boolean(data.btcZpubConfigured)}
+        onSave={() => void refresh()}
+      />
       <MailBlock mail={data.mail} />
     </div>
   );
@@ -433,7 +447,7 @@ function OrderStatus({
     <div className="mt-3 space-y-2">
       {isPending && !archived ? (
         <p className="rounded-md border border-border bg-raised px-3 py-2 text-xs text-muted">
-          Status: <span className="font-medium text-fg">Pending</span> (awaiting NexaPay card payment)
+          Status: <span className="font-medium text-fg">Pending</span>{" "}({order.payment_rail === "btc" ? `Bitcoin · ${order.btc_status || "waiting"}` : "awaiting NexaPay card payment"})
         </p>
       ) : null}
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
@@ -492,13 +506,151 @@ function OrderStatus({
 }
 
 
+function BitcoinOrdersBlock({
+  orders,
+  unmatched,
+  testnet,
+  onSave,
+}: {
+  orders: Awaited<ReturnType<typeof adminGet>>["orders"];
+  unmatched: NonNullable<Awaited<ReturnType<typeof adminGet>>["unmatchedBtc"]>;
+  testnet: boolean;
+  onSave: () => void;
+}) {
+  const open = orders.filter(
+    (o) =>
+      o.payment_rail === "btc" &&
+      o.status === "pending" &&
+      ["waiting", "seen", "underpaid", "expired"].includes(String(o.btc_status ?? "")),
+  );
+  const explorer = (txid: string) =>
+    testnet
+      ? `https://mempool.space/testnet/tx/${txid}`
+      : `https://mempool.space/tx/${txid}`;
+
+  return (
+    <section className="mt-10">
+      <h2 className="font-display text-2xl">Bitcoin</h2>
+      <p className="mt-1 text-sm text-muted">
+        Open quotes, underpayments, and unmatched deposits.
+      </p>
+      <ul className="mt-3 space-y-3">
+        {open.length === 0 ? (
+          <p className="text-sm text-muted">No open Bitcoin orders.</p>
+        ) : null}
+        {open.map((o) => (
+          <li key={o.id} className="rounded-xl border border-border bg-surface p-4 text-sm">
+            <p className="font-medium">
+              {o.order_number} · {cents(o.total_cents)} · {o.btc_status}
+            </p>
+            <p className="mt-1 break-all text-xs text-muted">
+              {o.btc_amount} BTC → {o.btc_address}
+            </p>
+            {o.btc_txid ? (
+              <a
+                className="mt-1 inline-block break-all text-xs text-accent hover:underline"
+                href={explorer(o.btc_txid)}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {o.btc_txid}
+              </a>
+            ) : null}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  void adminMarkBtcPaid({ data: { orderId: o.id } })
+                    .then(() => {
+                      toast.success("Marked paid");
+                      onSave();
+                    })
+                    .catch((err) =>
+                      toast.error(err instanceof Error ? err.message : "Failed"),
+                    );
+                }}
+              >
+                Mark paid
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  void adminCancelBtcQuote({ data: { orderId: o.id } })
+                    .then(() => {
+                      toast.success("Quote cancelled");
+                      onSave();
+                    })
+                    .catch((err) =>
+                      toast.error(err instanceof Error ? err.message : "Failed"),
+                    );
+                }}
+              >
+                Cancel quote
+              </Button>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <h3 className="mt-8 font-display text-xl">Unmatched payments</h3>
+      <ul className="mt-3 space-y-2 text-sm">
+        {unmatched.length === 0 ? (
+          <p className="text-muted">None.</p>
+        ) : (
+          unmatched.map((u) => (
+            <li key={u.id} className="rounded-md border border-border p-3">
+              <p className="break-all text-xs">
+                {u.amount} BTC · {u.address}
+              </p>
+              <a
+                className="break-all text-xs text-accent hover:underline"
+                href={explorer(u.txid)}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {u.txid}
+              </a>
+              {!u.noted ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-2"
+                  onClick={() => {
+                    void adminNoteUnmatched({ data: { id: u.id } })
+                      .then(() => {
+                        toast.success("Noted");
+                        onSave();
+                      })
+                      .catch((err) =>
+                        toast.error(
+                          err instanceof Error ? err.message : "Failed",
+                        ),
+                      );
+                  }}
+                >
+                  Mark noted
+                </Button>
+              ) : (
+                <p className="mt-1 text-xs text-faint">Noted</p>
+              )}
+            </li>
+          ))
+        )}
+      </ul>
+    </section>
+  );
+}
+
 function SettingsBlock({
   settings,
   nexapayWebhookSecretConfigured,
+  btcZpubConfigured,
   onSave,
 }: {
   settings: Awaited<ReturnType<typeof adminGet>>["settings"];
   nexapayWebhookSecretConfigured: boolean;
+  btcZpubConfigured: boolean;
   onSave: () => void;
 }) {
   const [storeName, setStoreName] = useState(settings.store_name);
@@ -517,6 +669,15 @@ function SettingsBlock({
   const [usdc, setUsdc] = useState(settings.usdc_wallet);
   const [btc, setBtc] = useState(settings.btc_wallet);
   const [btcEnabled, setBtcEnabled] = useState(Boolean(settings.btc_enabled));
+  const [btcZpub, setBtcZpub] = useState("");
+  const [zpubConfigured, setZpubConfigured] = useState(btcZpubConfigured);
+  useEffect(() => {
+    setZpubConfigured(btcZpubConfigured);
+  }, [btcZpubConfigured]);
+  const [btcMin, setBtcMin] = useState(
+    ((settings.btc_min_cents ?? 2500) / 100).toFixed(2),
+  );
+  const [btcTestnet, setBtcTestnet] = useState(Boolean(settings.btc_testnet));
   const [nexapayEnabled, setNexapayEnabled] = useState(
     settings.nexapay_enabled !== false,
   );
@@ -611,12 +772,43 @@ function SettingsBlock({
         <span>
           Show Bitcoin payments
           <span className="mt-0.5 block text-xs text-faint">
-            Off by default. Turn on only if NexaPay is down. Card stays the primary rail.
+            Product orders only. Off by default. Card / NexaPay stays primary. Requires a zpub below.
           </span>
         </span>
       </label>
       <div>
-        <Label>BTC receive address</Label>
+        <Label>Account zpub (BIP84)</Label>
+        <Input
+          type="password"
+          autoComplete="new-password"
+          value={btcZpub}
+          onChange={(e) => setBtcZpub(e.target.value)}
+          placeholder={
+            zpubConfigured
+              ? "•••••••• (saved — leave blank to keep)"
+              : "Paste zpub (mainnet) or vpub (testnet)"
+          }
+        />
+      </div>
+      <p className="text-sm text-muted">
+        zpub: {zpubConfigured ? "configured" : "missing"}
+      </p>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label>Bitcoin minimum (USD)</Label>
+          <Input value={btcMin} onChange={(e) => setBtcMin(e.target.value)} />
+        </div>
+        <label className="flex items-end gap-2 pb-2 text-sm text-muted">
+          <input
+            type="checkbox"
+            checked={btcTestnet}
+            onChange={(e) => setBtcTestnet(e.target.checked)}
+          />
+          Testnet
+        </label>
+      </div>
+      <div>
+        <Label>Legacy BTC note address (optional display)</Label>
         <Input value={btc} onChange={(e) => setBtc(e.target.value)} />
       </div>
       <div className="flex flex-wrap gap-3">
@@ -638,10 +830,15 @@ function SettingsBlock({
                   bannerText,
                   btcEnabled,
                   nexapayEnabled,
+                  btcZpub,
+                  btcMinDollars: btcMin,
+                  btcTestnet,
                 },
               });
               setNexapayWebhookSecret("");
+              setBtcZpub("");
               setWebhookSecretConfigured(Boolean(res.nexapayWebhookSecretConfigured));
+              setZpubConfigured(Boolean(res.btcZpubConfigured));
               toast.success("Settings saved");
               onSave();
             } catch (err) {

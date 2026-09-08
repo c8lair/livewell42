@@ -16,6 +16,8 @@ import { Route as SignupRouteImport } from './routes/signup'
 import { Route as CheckoutSuccessRouteImport } from './routes/checkout/success'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiNexapayWebhookRouteImport } from './routes/api/nexapay/webhook'
+import { Route as ApiBtcWatchRouteImport } from './routes/api/btc/watch'
+import { Route as PayBtcTokenRouteImport } from './routes/pay/btc/$token'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -52,6 +54,16 @@ const ApiNexapayWebhookRoute = ApiNexapayWebhookRouteImport.update({
   path: '/api/nexapay/webhook',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiBtcWatchRoute = ApiBtcWatchRouteImport.update({
+  id: '/api/btc/watch',
+  path: '/api/btc/watch',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PayBtcTokenRoute = PayBtcTokenRouteImport.update({
+  id: '/pay/btc/$token',
+  path: '/pay/btc/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -61,6 +73,8 @@ export interface FileRoutesByFullPath {
   '/checkout/success': typeof CheckoutSuccessRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/nexapay/webhook': typeof ApiNexapayWebhookRoute
+  '/api/btc/watch': typeof ApiBtcWatchRoute
+  '/pay/btc/$token': typeof PayBtcTokenRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -70,6 +84,8 @@ export interface FileRoutesByTo {
   '/checkout/success': typeof CheckoutSuccessRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/nexapay/webhook': typeof ApiNexapayWebhookRoute
+  '/api/btc/watch': typeof ApiBtcWatchRoute
+  '/pay/btc/$token': typeof PayBtcTokenRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -80,6 +96,8 @@ export interface FileRoutesById {
   '/checkout/success': typeof CheckoutSuccessRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/nexapay/webhook': typeof ApiNexapayWebhookRoute
+  '/api/btc/watch': typeof ApiBtcWatchRoute
+  '/pay/btc/$token': typeof PayBtcTokenRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -91,6 +109,8 @@ export interface FileRouteTypes {
     | '/checkout/success'
     | '/api/auth/$'
     | '/api/nexapay/webhook'
+    | '/api/btc/watch'
+    | '/pay/btc/$token'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -100,6 +120,8 @@ export interface FileRouteTypes {
     | '/checkout/success'
     | '/api/auth/$'
     | '/api/nexapay/webhook'
+    | '/api/btc/watch'
+    | '/pay/btc/$token'
   id:
     | '__root__'
     | '/'
@@ -109,6 +131,8 @@ export interface FileRouteTypes {
     | '/checkout/success'
     | '/api/auth/$'
     | '/api/nexapay/webhook'
+    | '/api/btc/watch'
+    | '/pay/btc/$token'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -119,6 +143,8 @@ export interface RootRouteChildren {
   CheckoutSuccessRoute: typeof CheckoutSuccessRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiNexapayWebhookRoute: typeof ApiNexapayWebhookRoute
+  ApiBtcWatchRoute: typeof ApiBtcWatchRoute
+  PayBtcTokenRoute: typeof PayBtcTokenRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -172,6 +198,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiNexapayWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/btc/watch': {
+      id: '/api/btc/watch'
+      path: '/api/btc/watch'
+      fullPath: '/api/btc/watch'
+      preLoaderRoute: typeof ApiBtcWatchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pay/btc/$token': {
+      id: '/pay/btc/$token'
+      path: '/pay/btc/$token'
+      fullPath: '/pay/btc/$token'
+      preLoaderRoute: typeof PayBtcTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -183,6 +223,8 @@ const rootRouteChildren: RootRouteChildren = {
   CheckoutSuccessRoute: CheckoutSuccessRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiNexapayWebhookRoute: ApiNexapayWebhookRoute,
+  ApiBtcWatchRoute: ApiBtcWatchRoute,
+  PayBtcTokenRoute: PayBtcTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
