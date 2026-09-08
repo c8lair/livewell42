@@ -23,7 +23,6 @@ function smtpSecure(): boolean {
   return raw === "true" || raw === "1";
 }
 
-/** True when SMTP_HOST, SMTP_USER, and SMTP_PASS are usable (HOST may default). */
 export function isSmtpConfigured(): boolean {
   const host = envTrim("SMTP_HOST") || "smtppro.zoho.com";
   const user = envTrim("SMTP_USER");
@@ -47,6 +46,9 @@ function createTransport() {
     port,
     secure: smtpSecure(),
     auth: { user, pass },
+    connectionTimeout: 8_000,
+    greetingTimeout: 8_000,
+    socketTimeout: 8_000,
   });
 }
 
@@ -96,11 +98,6 @@ async function sendMailRow(row: MailRow): Promise<void> {
   }
 }
 
-/**
- * Insert into mail_log, then send immediately when SMTP is configured.
- * Always inserts. Throws on send failure or when SMTP is not configured
- * so callers (receipt paths) can set orders.mail_error.
- */
 export async function queueMail(
   kind: string,
   to: string,
@@ -127,15 +124,12 @@ export async function queueMail(
       attempts: 0,
     });
   } finally {
-    // Drain other pending rows (fire-and-forget so a backlog drain
-    // does not mask the primary send error).
     void drainMailQueue().catch((err) => {
       console.error("drainMailQueue after queueMail", err);
     });
   }
 }
 
-/** Send oldest unsent mail_log rows (attempts < 5), up to ~20. */
 export async function drainMailQueue(limit = 20): Promise<{
   attempted: number;
   sent: number;
@@ -154,7 +148,6 @@ export async function drainMailQueue(limit = 20): Promise<{
       order by id asc
       limit ${limit}`;
   } catch (err) {
-    // Columns may not exist yet mid-migrate.
     console.error("drainMailQueue select failed", err);
     return { attempted: 0, sent: 0, failed: 0 };
   }
