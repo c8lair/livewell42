@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 const NEXAPAY_BASE = "https://nexapay.one/api/v1";
+const NEXAPAY_TIMEOUT_MS = 15_000;
 
 export type NexaPayCreateInput = {
   amount: number;
@@ -74,6 +75,7 @@ export async function createPayment(
       cancel_url: input.cancel_url,
       callback_url: input.callback_url,
     }),
+    signal: AbortSignal.timeout(NEXAPAY_TIMEOUT_MS),
   });
   const text = await res.text();
   let data: CreatePaymentResponse;
@@ -114,6 +116,7 @@ export async function getPayment(
         "X-API-Key": apiKey,
         "Content-Type": "application/json",
       },
+      signal: AbortSignal.timeout(NEXAPAY_TIMEOUT_MS),
     },
   );
   const text = await res.text();
