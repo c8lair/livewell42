@@ -203,8 +203,9 @@ function Shop({
   const merchandise = lines.reduce((s, l) => s + l.product.priceCents * l.qty, 0);
   const credit = Math.min(me.creditCents, merchandise);
   const normalShip = shippingCents(merchandise, settings.freeShippingAtCents, settings.shippingCents);
+  // Test Bitcoin mode: free shipping on the shop cart so small carts (e.g. $1) can pay BTC.
   const ship =
-    rail === "btc" && settings.testBitcoinPayments ? 0 : normalShip;
+    settings.btcEnabled && settings.testBitcoinPayments ? 0 : normalShip;
   const due = merchandise - credit + ship;
 
   function setQ(id: number, next: number, stock: number) {
