@@ -14,6 +14,7 @@ import {
 import { processBtcOrderByToken } from "./watch.server";
 import { explorerTxUrl } from "./mempool.server";
 import type { BtcPaymentView } from "./types";
+import { queueMail } from "@/lib/mail.server";
 
 const SITE_ORIGIN = "https://livewell42.com";
 const QUOTE_MINUTES = 15;
@@ -57,17 +58,6 @@ export async function loadBtcSettings(): Promise<BtcSettingsSlice> {
 
 function newPaymentToken(): string {
   return randomBytes(24).toString("base64url");
-}
-
-async function queueMail(
-  kind: string,
-  to: string,
-  subject: string,
-  body: string,
-) {
-  if (!to) return;
-  const sql = await getSql();
-  await sql`insert into mail_log (kind, to_email, subject, body) values (${kind}, ${to}, ${subject}, ${body})`;
 }
 
 export type CreateBtcOrderInput = {

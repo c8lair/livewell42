@@ -385,6 +385,12 @@ function OrdersBlock({
               <p className="mt-1 text-muted">
                 {lines.map((l) => `${l.qty}× ${l.name}`).join(", ")}
               </p>
+              {o.mail_error ? (
+                <p className="mt-2 rounded-md border border-border bg-raised px-3 py-2 text-xs text-muted">
+                  Customer receipt email error:{" "}
+                  <span className="text-fg">{o.mail_error}</span>
+                </p>
+              ) : null}
               <OrderStatus order={o} archived={archived} onSave={onSave} />
             </li>
           );

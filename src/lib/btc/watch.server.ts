@@ -9,17 +9,15 @@ import {
   sumMempoolReceived,
 } from "./mempool.server";
 import { btcToSats, satsToBtc, shortfallWithinUsd } from "./rates.server";
-
-async function queueMail(
-  kind: string,
-  to: string,
-  subject: string,
-  body: string,
-) {
-  if (!to) return;
-  const sql = await getSql();
-  await sql`insert into mail_log (kind, to_email, subject, body) values (${kind}, ${to}, ${subject}, ${body})`;
-}
+import {
+  queueMail,
+  setOrderMailError,
+  clearOrderMailError,
+} from "@/lib/mail.server";
+import {
+  buildOrderReceiptBody,
+  orderReceiptSubject,
+} from "@/lib/order-receipt";
 
 type OpenOrder = {
   id: number;
@@ -121,54 +119,45 @@ export async function finalizeBtcOrderPaid(
     select email from profiles where user_id = ${order.user_id}`;
   const email = profiles[0]?.email ?? "";
   const owner = await loadOwnerEmail();
-  const itemLines = items
-    .map((l) => `${l.qty} × ${l.name} ${l.size_label}`)
-    .join("\n");
-  const money = (n: number) => `$${(n / 100).toFixed(2)}`;
   const usd = order.usd_total_cents ?? order.total_cents;
-  const baseLines = [
-    `Order ${order.order_number}`,
-    itemLines,
-    `Ship to: ${order.ship_name}, ${order.ship_street}, ${order.ship_city}, ${order.ship_state} ${order.ship_zip}`,
-    `Merchandise ${money(order.merchandise_cents)}`,
-    order.credit_cents ? `Membership credit -${money(order.credit_cents)}` : null,
-    `Shipping ${order.shipping_cents === 0 ? "FREE" : money(order.shipping_cents)}`,
-    `Collected ${money(usd)} via btc`,
+  const receiptInput = {
+    orderNumber: order.order_number,
+    items,
+    merchandiseCents: order.merchandise_cents,
+    creditCents: order.credit_cents,
+    shippingCents: order.shipping_cents,
+    collectedCents: usd,
+    shipName: order.ship_name,
+    shipStreet: order.ship_street,
+    shipCity: order.ship_city,
+    shipState: order.ship_state,
+    shipZip: order.ship_zip,
+    paymentMethod: "Bitcoin" as const,
+    btcTxid: opts.txid,
+    adminNote: opts.overpayNote ?? order.btc_overpay_note ?? "",
+  };
+  // Owner/admin may keep shortfall/overpay notes; customer body has none.
+  const ownerBody = [
+    buildOrderReceiptBody(receiptInput, { audience: "owner" }),
     `BTC amount: ${order.btc_amount ?? ""}`,
     `BTC rate: ${order.btc_rate ?? ""} USD (${order.btc_rate_source ?? ""})`,
     `BTC address: ${order.btc_address ?? ""}`,
-    `BTC txid: ${opts.txid}`,
     `BTC received: ${opts.receivedBtc}`,
-  ];
-  const footer = [
-    `Date: ${new Date().toISOString()}`,
-    `For laboratory research use only. Not for human consumption.`,
-  ];
-  // Admin/owner may see shortfall/overpay notes; customer receipt stays a normal paid receipt
-  // (no underpay / shortfall wording).
-  const note = (opts.overpayNote ?? "").trim();
-  const customerSafeNote =
-    note && !/shortfall/i.test(note) ? `Note: ${note}` : null;
-  const ownerBody = [...baseLines, note ? `Note: ${note}` : null, ...footer]
-    .filter(Boolean)
-    .join("\n");
-  const customerBody = [...baseLines, customerSafeNote, ...footer]
-    .filter(Boolean)
-    .join("\n");
+  ].join("\n");
+  const customerBody = buildOrderReceiptBody(receiptInput, {
+    audience: "customer",
+  });
+  const subject = orderReceiptSubject(order.order_number);
 
-  await voidMail(
-    "order-owner",
-    owner || email,
-    `Livewell42 order ${order.order_number}`,
-    ownerBody,
-  );
+  await queueMail("order-owner", owner || email, subject, ownerBody);
   if (email) {
-    await voidMail(
-      "order-customer",
-      email,
-      `Livewell42 receipt ${order.order_number}`,
-      customerBody,
-    );
+    try {
+      await queueMail("order-customer", email, subject, customerBody);
+      await clearOrderMailError(orderId);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await setOrderMailError(orderId, msg);
+    }
   }
   return true;
 }

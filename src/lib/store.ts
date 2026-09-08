@@ -4,6 +4,10 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { LOWER_48_CODES } from "@/lib/us-states";
 import { shippingCents } from "@/lib/money";
+import {
+  buildOrderReceiptBody,
+  orderReceiptSubject,
+} from "@/lib/order-receipt";
 
 export type Product = {
   id: number;
@@ -320,17 +324,17 @@ function publicize(s: SettingsRow): PublicSettings {
   };
 }
 
+
+
 async function queueMail(
   kind: string,
   to: string,
   subject: string,
   body: string,
 ) {
-  if (!to) return;
-  const sql = await getSql();
-  await sql`insert into mail_log (kind, to_email, subject, body) values (${kind}, ${to}, ${subject}, ${body})`;
+  const { queueMail: send } = await import("@/lib/mail.server");
+  await send(kind, to, subject, body);
 }
-
 
 const SITE_ORIGIN = "https://livewell42.com";
 
@@ -513,37 +517,46 @@ async function finalizeOrderPaid(orderId: number, userId: string) {
 
   const profiles = await sql<{ email: string }>`select email from profiles where user_id = ${userId}`;
   const email = profiles[0]?.email ?? "";
-  const itemLines = items
-    .map((l) => `${l.qty} × ${l.name} ${l.size_label}`)
-    .join("\n");
-  const money = (n: number) => `${(n / 100).toFixed(2)}`;
-  const body = [
-    `Order ${order.order_number}`,
-    itemLines,
-    `Ship to: ${order.ship_name}, ${order.ship_street}, ${order.ship_city}, ${order.ship_state} ${order.ship_zip}`,
-    `Merchandise ${money(order.merchandise_cents)}`,
-    order.credit_cents ? `Membership credit -${money(order.credit_cents)}` : null,
-    `Shipping ${order.shipping_cents === 0 ? "FREE" : money(order.shipping_cents)}`,
-    `Collected ${money(order.total_cents)} via ${order.payment_rail}`,
-    `For laboratory research use only. Not for human consumption.`,
-  ]
-    .filter(Boolean)
-    .join("\n");
+  const paymentMethod =
+    order.payment_rail === "btc" ? ("Bitcoin" as const) : ("Card" as const);
+  const receiptInput = {
+    orderNumber: order.order_number,
+    items,
+    merchandiseCents: order.merchandise_cents,
+    creditCents: order.credit_cents,
+    shippingCents: order.shipping_cents,
+    collectedCents: order.total_cents,
+    shipName: order.ship_name,
+    shipStreet: order.ship_street,
+    shipCity: order.ship_city,
+    shipState: order.ship_state,
+    shipZip: order.ship_zip,
+    paymentMethod,
+  };
+  const ownerBody = buildOrderReceiptBody(receiptInput, { audience: "owner" });
+  const customerBody = buildOrderReceiptBody(receiptInput, {
+    audience: "customer",
+  });
+  const subject = orderReceiptSubject(order.order_number);
 
   await queueMail(
     "order-owner",
     settings.owner_email || email,
-    `Livewell42 order ${order.order_number}`,
-    body,
+    subject,
+    ownerBody,
   );
   if (email) {
-    await queueMail(
-      "order-customer",
-      email,
-      `Livewell42 receipt ${order.order_number}`,
-      body,
-    );
+    try {
+      await queueMail("order-customer", email, subject, customerBody);
+      const { clearOrderMailError } = await import("@/lib/mail.server");
+      await clearOrderMailError(orderId);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const { setOrderMailError } = await import("@/lib/mail.server");
+      await setOrderMailError(orderId, msg);
+    }
   }
+
 }
 
 export const confirmNexaPayPayment = createServerFn({ method: "POST" })
@@ -844,7 +857,52 @@ export const listMyOrders = createServerFn({ method: "GET" })
       status: string;
       tracking: string;
       created_at: string;
-    }>`select order_number, total_cents, status, tracking, created_at from orders where user_id = ${context.userId} and deleted_at is null order by id desc`;
+      payment_rail: string;
+    }>`select order_number, total_cents, status, tracking, created_at, payment_rail
+      from orders
+      where user_id = ${context.userId} and deleted_at is null
+      order by id desc`;
+  });
+
+export const getMyOrder = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator(z.object({ orderNumber: z.string().trim().min(1).max(40) }))
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const orders = await sql<{
+      id: number;
+      order_number: string;
+      merchandise_cents: number;
+      credit_cents: number;
+      shipping_cents: number;
+      total_cents: number;
+      status: string;
+      tracking: string;
+      created_at: string;
+      ship_name: string;
+      ship_street: string;
+      ship_city: string;
+      ship_state: string;
+      ship_zip: string;
+      payment_rail: string;
+      btc_txid: string;
+    }>`select id, order_number, merchandise_cents, credit_cents, shipping_cents,
+        total_cents, status, tracking, created_at, ship_name, ship_street,
+        ship_city, ship_state, ship_zip, payment_rail, coalesce(btc_txid, '') as btc_txid
+      from orders
+      where user_id = ${context.userId}
+        and order_number = ${data.orderNumber}
+        and deleted_at is null
+      limit 1`;
+    const order = orders[0];
+    if (!order) throw new Error("Order not found.");
+    const items = await sql<{
+      name: string;
+      size_label: string;
+      qty: number;
+      price_cents: number;
+    }>`select name, size_label, qty, price_cents from order_items where order_id = ${order.id}`;
+    return { order, items };
   });
 
 async function requireAdmin(userId: string) {
@@ -917,13 +975,14 @@ export const adminGet = createServerFn({ method: "GET" })
       btc_received: "" as string,
       quote_expires_at: null as string | null,
       payment_token: null as string | null,
+      mail_error: null as string | null,
     };
     type AdminOrderRow = typeof orderCols;
     let orders: AdminOrderRow[] = [];
     let archivedOrders: AdminOrderRow[] = [];
     try {
-      orders = await sql<AdminOrderRow>`select id, order_number, user_id, merchandise_cents, credit_cents, shipping_cents, total_cents, status, ship_name, ship_street, ship_city, ship_state, ship_zip, payment_rail, tracking, created_at, deleted_at, btc_status, btc_amount, btc_address, btc_txid, btc_received, quote_expires_at, payment_token from orders where deleted_at is null order by id desc limit 200`;
-      archivedOrders = await sql<AdminOrderRow>`select id, order_number, user_id, merchandise_cents, credit_cents, shipping_cents, total_cents, status, ship_name, ship_street, ship_city, ship_state, ship_zip, payment_rail, tracking, created_at, deleted_at, btc_status, btc_amount, btc_address, btc_txid, btc_received, quote_expires_at, payment_token from orders where deleted_at is not null order by deleted_at desc limit 200`;
+      orders = await sql<AdminOrderRow>`select id, order_number, user_id, merchandise_cents, credit_cents, shipping_cents, total_cents, status, ship_name, ship_street, ship_city, ship_state, ship_zip, payment_rail, tracking, created_at, deleted_at, btc_status, btc_amount, btc_address, btc_txid, btc_received, quote_expires_at, payment_token, mail_error from orders where deleted_at is null order by id desc limit 200`;
+      archivedOrders = await sql<AdminOrderRow>`select id, order_number, user_id, merchandise_cents, credit_cents, shipping_cents, total_cents, status, ship_name, ship_street, ship_city, ship_state, ship_zip, payment_rail, tracking, created_at, deleted_at, btc_status, btc_amount, btc_address, btc_txid, btc_received, quote_expires_at, payment_token, mail_error from orders where deleted_at is not null order by deleted_at desc limit 200`;
     } catch {
       orders = await sql<AdminOrderRow>`select id, order_number, user_id, merchandise_cents, credit_cents, shipping_cents, total_cents, status, ship_name, ship_street, ship_city, ship_state, ship_zip, payment_rail, tracking, created_at, deleted_at from orders where deleted_at is null order by id desc limit 200`;
       archivedOrders = await sql<AdminOrderRow>`select id, order_number, user_id, merchandise_cents, credit_cents, shipping_cents, total_cents, status, ship_name, ship_street, ship_city, ship_state, ship_zip, payment_rail, tracking, created_at, deleted_at from orders where deleted_at is not null order by deleted_at desc limit 200`;
