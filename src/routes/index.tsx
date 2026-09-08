@@ -79,6 +79,27 @@ function MemberApp() {
     });
   }, []);
 
+  // Re-fetch settings when returning to the tab so Admin "Test Bitcoin payments" is live.
+  useEffect(() => {
+    function onVisible() {
+      if (document.visibilityState !== "visible") return;
+      void refresh().catch(() => {
+        /* keep last-good bootstrap */
+      });
+    }
+    function onFocus() {
+      void refresh().catch(() => {
+        /* keep last-good bootstrap */
+      });
+    }
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, []);
+
   if (loading) {
     return <div className="min-h-dvh bg-bg" />;
   }
@@ -203,9 +224,8 @@ function Shop({
   const merchandise = lines.reduce((s, l) => s + l.product.priceCents * l.qty, 0);
   const credit = Math.min(me.creditCents, merchandise);
   const normalShip = shippingCents(merchandise, settings.freeShippingAtCents, settings.shippingCents);
-  // Test Bitcoin mode: free shipping on the shop cart so small carts (e.g. $1) can pay BTC.
-  const ship =
-    settings.btcEnabled && settings.testBitcoinPayments ? 0 : normalShip;
+  // Test Bitcoin payments alone → $0 shipping (independent of Testnet / btcEnabled).
+  const ship = settings.testBitcoinPayments ? 0 : normalShip;
   const due = merchandise - credit + ship;
 
   function setQ(id: number, next: number, stock: number) {

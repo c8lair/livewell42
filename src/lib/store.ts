@@ -181,6 +181,11 @@ async function ensureStoreSettingsColumns(sql: Awaited<ReturnType<typeof getSql>
   );
 }
 
+/** Truthy for boolean/driver quirks (pg boolean, "t"/"true"/1). */
+export function asOn(v: unknown): boolean {
+  return v === true || v === "t" || v === "true" || v === 1 || v === "1";
+}
+
 async function loadSettings(): Promise<SettingsRow> {
   const sql = await getSql();
   try {
@@ -247,8 +252,8 @@ async function loadSettings(): Promise<SettingsRow> {
           nexapay_webhook_secret: string | null;
         }>`select test_bitcoin_payments, btc_testnet, btc_min_cents, btc_zpub, btc_next_index, nexapay_webhook_secret from store_settings where id = 1`;
         if (extra[0]) {
-          testBitcoinPayments = Boolean(extra[0].test_bitcoin_payments);
-          btcTestnet = Boolean(extra[0].btc_testnet);
+          testBitcoinPayments = asOn(extra[0].test_bitcoin_payments);
+          btcTestnet = asOn(extra[0].btc_testnet);
           btcMinCents = extra[0].btc_min_cents ?? 2500;
           btcZpub = extra[0].btc_zpub ?? "";
           btcNextIndex = extra[0].btc_next_index ?? 0;
@@ -289,8 +294,6 @@ async function loadSettings(): Promise<SettingsRow> {
   r.btc_zpub = r.btc_zpub ?? "";
   r.btc_next_index = r.btc_next_index ?? 0;
   r.btc_min_cents = r.btc_min_cents ?? 2500;
-  const asOn = (v: unknown) =>
-    v === true || v === "t" || v === "true" || v === 1 || v === "1";
   r.btc_testnet = asOn(r.btc_testnet);
   r.test_bitcoin_payments = asOn(r.test_bitcoin_payments);
   return r;
@@ -312,8 +315,8 @@ function publicize(s: SettingsRow): PublicSettings {
     // Bitcoin is on only when enabled AND zpub is configured (never expose zpub).
     btcEnabled: Boolean(s.btc_enabled) && Boolean(s.btc_zpub?.trim()),
     btcMinCents: s.btc_min_cents ?? 2500,
-    btcTestnet: Boolean(s.btc_testnet),
-    testBitcoinPayments: Boolean(s.test_bitcoin_payments),
+    btcTestnet: asOn(s.btc_testnet),
+    testBitcoinPayments: asOn(s.test_bitcoin_payments),
   };
 }
 
@@ -549,7 +552,7 @@ export const confirmNexaPayPayment = createServerFn({ method: "POST" })
     return finalizePayment(data.orderId);
   });
 
-export const getBootstrap = createServerFn({ method: "GET" })
+export const getBootstrap = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     const { getSessionUser } = await import("@/lib/auth/verify.server");
@@ -1094,11 +1097,9 @@ export const adminSaveSettings = createServerFn({ method: "POST" })
       (check[0]?.nexapay_webhook_secret ?? "").trim(),
     );
     const btcZpubConfigured = Boolean((check[0]?.btc_zpub ?? "").trim());
-    const asOnFlag = (v: unknown) =>
-      v === true || v === "t" || v === "true" || v === 1 || v === "1";
     const flagCheck = await sql<{ test_bitcoin_payments: boolean }>`
       select test_bitcoin_payments from store_settings where id = 1`;
-    const savedTestBitcoinPayments = asOnFlag(flagCheck[0]?.test_bitcoin_payments);
+    const savedTestBitcoinPayments = asOn(flagCheck[0]?.test_bitcoin_payments);
     if (savedTestBitcoinPayments !== testBitcoinPayments) {
       throw new Error(
         "Test Bitcoin payments did not save. Check that migration 0012 applied (test_bitcoin_payments column).",
