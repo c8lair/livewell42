@@ -28,3 +28,26 @@ Signup on `/signup` requires Turnstile. Set both variables on the Livewell42 **a
 4. Save and redeploy
 
 Signup fails if the widget token is missing or `siteverify` fails. Do not put these keys in Admin Settings or git.
+
+## Zoho SMTP (outbound mail)
+
+Password-reset and paid-order receipts are queued in `mail_log` and sent via Zoho SMTP. Set these on the Livewell42 **app** service (never commit secrets):
+
+1. Railway → Livewell42 service → **Variables** → **New Variable**
+2. Add:
+
+| Variable | Example / notes |
+|---|---|
+| `SMTP_HOST` | `smtppro.zoho.com` (default if unset) |
+| `SMTP_PORT` | `465` (default) |
+| `SMTP_SECURE` | `true` (default; `"true"` / `"1"`) |
+| `SMTP_USER` | `support@livewell42.com` |
+| `SMTP_PASS` | Zoho app password / mailbox password (**required**) |
+| `SMTP_FROM` | `orders@livewell42.com` (default) |
+| `SMTP_FROM_NAME` | `Livewell42 Orders` (default) |
+
+3. Save and **redeploy** so the vars are live.
+4. Optional: `MAIL_DRAIN_SECRET` — if set, `/api/mail/drain` requires header `x-mail-drain-secret`.
+
+If `SMTP_USER` / `SMTP_PASS` are missing, rows still insert into `mail_log` but send throws `SMTP is not configured` (captured on `orders.mail_error` for receipts). Do not put `SMTP_PASS` in git or committed `.env` files.
+

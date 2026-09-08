@@ -912,7 +912,7 @@ function MailBlock({ mail }: { mail: Awaited<ReturnType<typeof adminGet>>["mail"
   return (
     <section className="mt-10">
       <h2 className="font-display text-2xl">Outgoing mail</h2>
-      <p className="text-sm text-muted">Queued copies until SMTP is connected. Orders still save if email fails.</p>
+      <p className="text-sm text-muted">Sent via Zoho SMTP when SMTP_* is configured on Railway. Orders still save if email fails; check mail_error on the order.</p>
       <ul className="mt-3 space-y-2 text-sm">
         {mail.map((m) => (
           <li key={m.id} className="rounded-md border border-border p-3">

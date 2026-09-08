@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { processOpenBtcOrders } from "@/lib/btc/watch.server";
+import { drainMailQueue } from "@/lib/mail.server";
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -22,7 +23,11 @@ async function run(request: Request) {
       }
     }
     const result = await processOpenBtcOrders();
-    return json({ ok: true, ...result });
+    const mail = await drainMailQueue().catch((err) => {
+      console.error("mail drain from btc watch", err);
+      return { attempted: 0, sent: 0, failed: 0, error: String(err) };
+    });
+    return json({ ok: true, ...result, mail });
   } catch (err) {
     console.error("btc watch error", err);
     return json(

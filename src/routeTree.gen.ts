@@ -20,6 +20,7 @@ import { Route as OrdersIndexRouteImport } from './routes/orders/index'
 import { Route as OrdersOrderNumberRouteImport } from './routes/orders/$orderNumber'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiBtcWatchRouteImport } from './routes/api/btc/watch'
+import { Route as ApiMailDrainRouteImport } from './routes/api/mail/drain'
 import { Route as ApiNexapayWebhookRouteImport } from './routes/api/nexapay/webhook'
 import { Route as PayBtcTokenRouteImport } from './routes/pay/btc/$token'
 
@@ -78,6 +79,11 @@ const ApiBtcWatchRoute = ApiBtcWatchRouteImport.update({
   path: '/api/btc/watch',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiMailDrainRoute = ApiMailDrainRouteImport.update({
+  id: '/api/mail/drain',
+  path: '/api/mail/drain',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiNexapayWebhookRoute = ApiNexapayWebhookRouteImport.update({
   id: '/api/nexapay/webhook',
   path: '/api/nexapay/webhook',
@@ -101,6 +107,7 @@ export interface FileRoutesByFullPath {
   '/orders/': typeof OrdersIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/btc/watch': typeof ApiBtcWatchRoute
+  '/api/mail/drain': typeof ApiMailDrainRoute
   '/api/nexapay/webhook': typeof ApiNexapayWebhookRoute
   '/pay/btc/$token': typeof PayBtcTokenRoute
 }
@@ -116,6 +123,7 @@ export interface FileRoutesByTo {
   '/orders': typeof OrdersIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/btc/watch': typeof ApiBtcWatchRoute
+  '/api/mail/drain': typeof ApiMailDrainRoute
   '/api/nexapay/webhook': typeof ApiNexapayWebhookRoute
   '/pay/btc/$token': typeof PayBtcTokenRoute
 }
@@ -132,6 +140,7 @@ export interface FileRoutesById {
   '/orders/': typeof OrdersIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/btc/watch': typeof ApiBtcWatchRoute
+  '/api/mail/drain': typeof ApiMailDrainRoute
   '/api/nexapay/webhook': typeof ApiNexapayWebhookRoute
   '/pay/btc/$token': typeof PayBtcTokenRoute
 }
@@ -149,6 +158,7 @@ export interface FileRouteTypes {
     | '/orders/'
     | '/api/auth/$'
     | '/api/btc/watch'
+    | '/api/mail/drain'
     | '/api/nexapay/webhook'
     | '/pay/btc/$token'
   fileRoutesByTo: FileRoutesByTo
@@ -164,6 +174,7 @@ export interface FileRouteTypes {
     | '/orders'
     | '/api/auth/$'
     | '/api/btc/watch'
+    | '/api/mail/drain'
     | '/api/nexapay/webhook'
     | '/pay/btc/$token'
   id:
@@ -179,6 +190,7 @@ export interface FileRouteTypes {
     | '/orders/'
     | '/api/auth/$'
     | '/api/btc/watch'
+    | '/api/mail/drain'
     | '/api/nexapay/webhook'
     | '/pay/btc/$token'
   fileRoutesById: FileRoutesById
@@ -195,6 +207,7 @@ export interface RootRouteChildren {
   OrdersIndexRoute: typeof OrdersIndexRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiBtcWatchRoute: typeof ApiBtcWatchRoute
+  ApiMailDrainRoute: typeof ApiMailDrainRoute
   ApiNexapayWebhookRoute: typeof ApiNexapayWebhookRoute
   PayBtcTokenRoute: typeof PayBtcTokenRoute
 }
@@ -278,6 +291,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiBtcWatchRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/mail/drain': {
+      id: '/api/mail/drain'
+      path: '/api/mail/drain'
+      fullPath: '/api/mail/drain'
+      preLoaderRoute: typeof ApiMailDrainRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/nexapay/webhook': {
       id: '/api/nexapay/webhook'
       path: '/api/nexapay/webhook'
@@ -307,6 +327,7 @@ const rootRouteChildren: RootRouteChildren = {
   OrdersIndexRoute: OrdersIndexRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiBtcWatchRoute: ApiBtcWatchRoute,
+  ApiMailDrainRoute: ApiMailDrainRoute,
   ApiNexapayWebhookRoute: ApiNexapayWebhookRoute,
   PayBtcTokenRoute: PayBtcTokenRoute,
 }
