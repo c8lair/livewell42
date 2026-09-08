@@ -76,6 +76,32 @@ export function satsToBtc(sats: bigint): string {
   return `${neg ? "-" : ""}${whole}.${frac}`;
 }
 
+
+/** Convert USD cents to sats at a given USD/BTC rate (ceil, like usdCentsToBtc). */
+export function usdCentsToSats(cents: number, rateUsd: string): bigint {
+  if (cents < 0) throw new Error("Amount must be non-negative.");
+  const rate = Number(rateUsd);
+  if (!Number.isFinite(rate) || rate <= 0) throw new Error("Invalid BTC rate.");
+  if (cents === 0) return 0n;
+  return BigInt(Math.ceil((cents / 100 / rate) * 1e8 - 1e-9));
+}
+
+/**
+ * True when confirmed received is short of quoted by LESS than maxUsdCents
+ * (default $1) at the invoice rate. Exact/over is not a shortfall.
+ */
+export function shortfallWithinUsd(
+  quotedSats: bigint,
+  receivedSats: bigint,
+  rateUsd: string,
+  maxUsdCents = 100,
+): boolean {
+  if (receivedSats <= 0n || receivedSats >= quotedSats) return false;
+  const shortfall = quotedSats - receivedSats;
+  const maxSats = usdCentsToSats(maxUsdCents, rateUsd);
+  return shortfall < maxSats;
+}
+
 export function remainingBtc(quoted: string, received: string): string {
   const q = btcToSats(quoted);
   const r = btcToSats(received || "0");

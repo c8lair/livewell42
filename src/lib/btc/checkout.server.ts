@@ -10,7 +10,6 @@ import {
   remainingBtc,
   usdCentsToBtc,
   btcToSats,
-  satsToBtc,
 } from "./rates.server";
 import { processBtcOrderByToken } from "./watch.server";
 import { explorerTxUrl } from "./mempool.server";
@@ -289,15 +288,16 @@ export async function loadBtcPaymentView(token: string): Promise<BtcPaymentView>
       throw new Error("Payment not found.");
     }
     const remaining = remainingBtc(o.btc_amount, o.btc_received || "0");
-    const amountForQr =
-      o.btc_status === "underpaid" && btcToSats(remaining) > 0n
-        ? remaining
-        : o.btc_amount;
+    // Always show original quote amount (no remaining top-up QR)
+    const amountForQr = o.btc_amount;
     const paid = o.status === "paid" || o.btc_status === "paid";
+    // Legacy underpaid → seen for customer UI (no underpay copy)
+    const customerStatus =
+      o.btc_status === "underpaid" ? "seen" : o.btc_status || "waiting";
     const view: BtcPaymentView = {
       orderNumber: o.order_number,
       status: o.status,
-      btcStatus: o.btc_status || "waiting",
+      btcStatus: customerStatus,
       usdTotalCents: o.usd_total_cents ?? o.total_cents,
       btcAmount: o.btc_amount,
       btcReceived: o.btc_received || "0",
@@ -343,42 +343,30 @@ export async function refreshBtcPaymentQuote(token: string): Promise<BtcPaymentV
     if (o.btc_status === "cancelled") {
       throw new Error("This quote was cancelled.");
     }
-
-    const remaining = remainingBtc(o.btc_amount, o.btc_received || "0");
-    if (btcToSats(remaining) <= 0n && o.btc_status !== "underpaid") {
-      // Full amount still owed — refresh full quote with new rate
+    // Any inbound sats: do not invent a new quote / reprice
+    if (btcToSats(o.btc_received || "0") > 0n) {
+      throw new Error(
+        "Payment already detected on this address — quote cannot be refreshed.",
+      );
+    }
+    if (o.btc_status === "seen" || o.btc_status === "underpaid") {
+      throw new Error(
+        "Payment already detected on this address — quote cannot be refreshed.",
+      );
     }
 
     const { rate, source } = await getBtcUsdRate();
-    let newAmount: string;
-    if (o.btc_status === "underpaid" && btcToSats(o.btc_received || "0") > 0n) {
-      // Keep remaining in BTC terms; optionally reprice remaining USD
-      const usdLeft =
-        o.usd_total_cents ??
-        o.total_cents;
-      // Prefer sat difference of original quote
-      newAmount = remaining;
-      if (btcToSats(newAmount) <= 0n) {
-        throw new Error("Nothing remaining to pay.");
-      }
-      void usdLeft;
-    } else {
-      const usd = o.usd_total_cents ?? o.total_cents;
-      newAmount = usdCentsToBtc(usd, rate);
-    }
+    const usd = o.usd_total_cents ?? o.total_cents;
+    const newAmount = usdCentsToBtc(usd, rate);
 
     const expires = new Date(Date.now() + QUOTE_MINUTES * 60_000);
     await sql`
       update orders set
-        btc_amount = ${
-          o.btc_status === "underpaid"
-            ? satsToBtc(btcToSats(o.btc_received || "0") + btcToSats(newAmount))
-            : newAmount
-        },
+        btc_amount = ${newAmount},
         btc_rate = ${rate},
         btc_rate_source = ${source},
         quote_expires_at = ${expires.toISOString()},
-        btc_status = ${o.btc_status === "underpaid" ? "underpaid" : "waiting"}
+        btc_status = 'waiting'
       where id = ${o.id} and status = 'pending'`;
 
     // Return fresh view (re-run watcher + load)
@@ -409,12 +397,13 @@ export async function refreshBtcPaymentQuote(token: string): Promise<BtcPaymentV
     const f = fresh[0];
     if (!f || !f.btc_address || !f.btc_amount) throw new Error("Payment not found.");
     const rem = remainingBtc(f.btc_amount, f.btc_received || "0");
-    const amountForQr =
-      f.btc_status === "underpaid" && btcToSats(rem) > 0n ? rem : f.btc_amount;
+    const amountForQr = f.btc_amount;
+    const customerStatus =
+      f.btc_status === "underpaid" ? "seen" : f.btc_status || "waiting";
     return {
       orderNumber: f.order_number,
       status: f.status,
-      btcStatus: f.btc_status || "waiting",
+      btcStatus: customerStatus,
       usdTotalCents: f.usd_total_cents ?? f.total_cents,
       btcAmount: f.btc_amount,
       btcReceived: f.btc_received || "0",

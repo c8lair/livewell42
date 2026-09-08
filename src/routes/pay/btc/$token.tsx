@@ -58,8 +58,12 @@ function BtcPayPage() {
 
   const countdown = useMemo(() => {
     if (!view?.quoteExpiresAt || view.paid) return null;
+    // Never treat as expired for customer once any inbound was seen
+    const inbound =
+      view.btcStatus === "seen" ||
+      (view.btcReceived && view.btcReceived !== "0");
     const ms = new Date(view.quoteExpiresAt).getTime() - now;
-    if (ms <= 0) return "Expired";
+    if (ms <= 0) return inbound ? null : "Expired";
     const s = Math.floor(ms / 1000);
     const m = Math.floor(s / 60);
     const r = s % 60;
@@ -128,7 +132,7 @@ function BtcPayPage() {
             )}
           </p>
         ) : null}
-        {view.overpayNote ? (
+        {view.overpayNote && !/shortfall/i.test(view.overpayNote) ? (
           <p className="mt-3 text-sm text-muted">{view.overpayNote}</p>
         ) : null}
         <Link
@@ -141,19 +145,29 @@ function BtcPayPage() {
     );
   }
 
+  const receivedSats = (() => {
+    try {
+      const s = String(view.btcReceived || "0").trim();
+      if (!s || s === "0") return 0;
+      const n = Number(s);
+      return Number.isFinite(n) && n > 0 ? n : 0;
+    } catch {
+      return 0;
+    }
+  })();
+  const hasReceived = receivedSats > 0 || view.btcStatus === "seen";
+
   const statusLabel =
     view.btcStatus === "seen"
       ? "Seen in mempool — waiting for 1 confirmation"
-      : view.btcStatus === "underpaid"
-        ? "Underpaid — send the remaining amount"
-        : view.btcStatus === "expired"
-          ? "Quote expired — refresh to continue"
-          : view.btcStatus === "cancelled"
-            ? "Cancelled"
-            : "Waiting for payment";
+      : view.btcStatus === "expired"
+        ? "Quote expired — refresh to continue"
+        : view.btcStatus === "cancelled"
+          ? "Cancelled"
+          : "Waiting for payment";
 
-  const showAmount =
-    view.btcStatus === "underpaid" ? view.btcRemaining : view.btcAmount;
+  // Always show original quote (no remaining top-up amount)
+  const showAmount = view.btcAmount;
 
   return (
     <main className="mx-auto max-w-lg px-5 pb-20 pt-10">
@@ -198,13 +212,10 @@ function BtcPayPage() {
           onCopy={() => void copy(cents(view.usdTotalCents), "USD")}
         />
         <Row
-          label={view.btcStatus === "underpaid" ? "BTC remaining" : "BTC amount"}
+          label="BTC amount"
           value={`${showAmount} BTC`}
           onCopy={() => void copy(showAmount, "BTC amount")}
         />
-        {view.btcStatus === "underpaid" ? (
-          <Row label="Received so far" value={`${view.btcReceived} BTC`} />
-        ) : null}
         <Row
           label="Address"
           value={view.address}
@@ -220,9 +231,8 @@ function BtcPayPage() {
         >
           Open wallet
         </a>
-        {(view.btcStatus === "underpaid" ||
-          view.btcStatus === "expired" ||
-          countdown === "Expired") && (
+        {!hasReceived &&
+          (view.btcStatus === "expired" || countdown === "Expired") && (
           <Button
             type="button"
             variant="outline"

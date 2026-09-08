@@ -8,7 +8,7 @@ import {
   sumConfirmedReceived,
   sumMempoolReceived,
 } from "./mempool.server";
-import { btcToSats, satsToBtc } from "./rates.server";
+import { btcToSats, satsToBtc, shortfallWithinUsd } from "./rates.server";
 
 async function queueMail(
   kind: string,
@@ -126,7 +126,7 @@ export async function finalizeBtcOrderPaid(
     .join("\n");
   const money = (n: number) => `$${(n / 100).toFixed(2)}`;
   const usd = order.usd_total_cents ?? order.total_cents;
-  const body = [
+  const baseLines = [
     `Order ${order.order_number}`,
     itemLines,
     `Ship to: ${order.ship_name}, ${order.ship_street}, ${order.ship_city}, ${order.ship_state} ${order.ship_zip}`,
@@ -139,25 +139,35 @@ export async function finalizeBtcOrderPaid(
     `BTC address: ${order.btc_address ?? ""}`,
     `BTC txid: ${opts.txid}`,
     `BTC received: ${opts.receivedBtc}`,
-    opts.overpayNote ? `Note: ${opts.overpayNote}` : null,
+  ];
+  const footer = [
     `Date: ${new Date().toISOString()}`,
     `For laboratory research use only. Not for human consumption.`,
-  ]
+  ];
+  // Admin/owner may see shortfall/overpay notes; customer receipt stays a normal paid receipt
+  // (no underpay / shortfall wording).
+  const note = (opts.overpayNote ?? "").trim();
+  const customerSafeNote =
+    note && !/shortfall/i.test(note) ? `Note: ${note}` : null;
+  const ownerBody = [...baseLines, note ? `Note: ${note}` : null, ...footer]
+    .filter(Boolean)
+    .join("\n");
+  const customerBody = [...baseLines, customerSafeNote, ...footer]
     .filter(Boolean)
     .join("\n");
 
-  await queueMail(
+  await voidMail(
     "order-owner",
     owner || email,
     `Livewell42 order ${order.order_number}`,
-    body,
+    ownerBody,
   );
   if (email) {
-    await queueMail(
+    await voidMail(
       "order-customer",
       email,
       `Livewell42 receipt ${order.order_number}`,
-      body,
+      customerBody,
     );
   }
   return true;
@@ -240,9 +250,7 @@ export async function processOneBtcOrder(
   const confirmedRecv = sumConfirmedReceived(txs);
   const mempoolRecv = sumMempoolReceived(txs);
   const totalInbound = confirmedRecv + mempoolRecv;
-  const receivedStr = satsToBtc(confirmedRecv > 0n ? confirmedRecv : totalInbound);
-
-  // Prefer a confirmed covering tx; else any inbound txid for display
+    // Prefer a confirmed covering tx; else any inbound txid for display
   const coveringConfirmed = txs.find(
     (t) => t.confirmed && t.confirmations >= 1 && t.receivedSats > 0n,
   );
@@ -253,11 +261,11 @@ export async function processOneBtcOrder(
     order.btc_txid ||
     "";
 
-  // Paid: confirmed sats covering quote (exact or over)
+  // Paid: confirmed exact or over
   if (confirmedRecv >= quoted && quoted > 0n) {
     const over =
       confirmedRecv > quoted
-        ? `Overpaid by ${satsToBtc(confirmedRecv - quoted)} BTC`
+        ? `Received ${confirmedRecv.toString()} sats / quoted ${quoted.toString()} sats (overpay ${satsToBtc(confirmedRecv - quoted)} BTC)`
         : "";
     await finalizeBtcOrderPaid(order.id, {
       txid: coveringConfirmed?.txid || displayTxid,
@@ -267,45 +275,69 @@ export async function processOneBtcOrder(
     return { ok: true, btcStatus: "paid" };
   }
 
-  // Underpaid with confirmations
+  // Paid: dust shortfall within <$1 USD at invoice btc_rate (not a later spot rate)
+  if (
+    confirmedRecv > 0n &&
+    confirmedRecv < quoted &&
+    order.btc_rate &&
+    shortfallWithinUsd(quoted, confirmedRecv, order.btc_rate, 100)
+  ) {
+    const note = `Received ${confirmedRecv.toString()} sats / quoted ${quoted.toString()} sats (shortfall within $1)`;
+    await finalizeBtcOrderPaid(order.id, {
+      txid: coveringConfirmed?.txid || displayTxid,
+      receivedBtc: satsToBtc(confirmedRecv),
+      overpayNote: note,
+    });
+    return { ok: true, btcStatus: "paid" };
+  }
+
+  // Short by ≥ $1 at invoice rate: keep pending on same address; update received + txid.
+  // Prefer customer-facing `seen` (do not set underpaid / no top-up UI).
   if (confirmedRecv > 0n && confirmedRecv < quoted) {
     await sql`
       update orders set
-        btc_status = 'underpaid',
+        btc_status = 'seen',
         btc_received = ${satsToBtc(confirmedRecv)},
         btc_txid = ${displayTxid}
       where id = ${order.id} and status = 'pending'`;
-    return { ok: true, btcStatus: "underpaid" };
+    return { ok: true, btcStatus: "seen" };
   }
 
-  // Seen: mempool inbound while quote open (0-conf — do NOT mark paid)
-  if (quoteOpen && mempoolRecv > 0n) {
+  // Seen: mempool inbound (0-conf — do NOT mark paid). Never expire after a hit.
+  if (mempoolRecv > 0n) {
     await sql`
       update orders set
         btc_status = 'seen',
         btc_received = ${satsToBtc(mempoolRecv)},
         btc_txid = ${displayTxid}
       where id = ${order.id} and status = 'pending'
-        and (btc_status is null or btc_status in ('waiting', 'seen'))`;
+        and (btc_status is null or btc_status in ('waiting', 'seen', 'underpaid', 'expired'))`;
     return { ok: true, btcStatus: "seen" };
   }
 
-  // Expired quote
-  if (!quoteOpen && order.btc_status !== "underpaid") {
+  // Never expire after any inbound mempool/confirmed activity or status `seen`
+  const hasInbound =
+    totalInbound > 0n ||
+    order.btc_status === "seen" ||
+    order.btc_status === "underpaid" ||
+    btcToSats(order.btc_received || "0") > 0n;
+  if (!quoteOpen && hasInbound) {
+    if (order.btc_status === "underpaid" || order.btc_status === "expired") {
+      await sql`
+        update orders set btc_status = 'seen'
+        where id = ${order.id} and status = 'pending'`;
+    }
+    return { ok: true, btcStatus: "seen" };
+  }
+
+  // Expired quote — only when no mempool/inbound hit ever
+  if (!quoteOpen) {
     if (order.btc_status !== "expired") {
       await sql`
         update orders set btc_status = 'expired'
         where id = ${order.id} and status = 'pending'
-          and btc_status is distinct from 'paid'`;
-    }
-    // Late BTC after expiry → unmatched
-    if (totalInbound > 0n && anyInbound) {
-      await noteUnmatched({
-        address: order.btc_address,
-        txid: anyInbound.txid,
-        amount: satsToBtc(anyInbound.receivedSats),
-        confirmed: anyInbound.confirmed,
-      });
+          and btc_status is distinct from 'paid'
+          and btc_status is distinct from 'seen'`;
     }
     return { ok: true, btcStatus: "expired" };
   }
@@ -317,8 +349,6 @@ export async function processOneBtcOrder(
       where id = ${order.id} and status = 'pending' and btc_status is null`;
   }
 
-  // Unmatched: funds on address with no open waiting/seen/underpaid quote
-  // (handled above for expired). Also check profile addresses with no open order.
   void summary;
 
   return { ok: true, btcStatus: order.btc_status || "waiting" };
@@ -339,7 +369,7 @@ export async function processOpenBtcOrders(): Promise<{
     order by id asc
     limit 100`;
 
-  // Also expire waiting quotes past expiry
+  // Expire waiting quotes past expiry only if never seen / no inbound sats
   const stale = await sql<{ id: number }>`
     select id from orders
     where deleted_at is null
@@ -348,6 +378,7 @@ export async function processOpenBtcOrders(): Promise<{
       and btc_status = 'waiting'
       and quote_expires_at is not null
       and quote_expires_at < now()
+      and (btc_received is null or btc_received = '' or btc_received = '0')
     limit 50`;
 
   const ids = new Set<number>([
