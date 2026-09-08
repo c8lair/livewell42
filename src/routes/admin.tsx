@@ -822,8 +822,8 @@ function SettingsBlock({
         <span>
           Test Bitcoin payments
           <span className="mt-0.5 block text-xs text-faint">
-            Off by default. When on (and Bitcoin is enabled): ignore the USD minimum and force
-            $0 shipping so small carts can open a real payment page. Separate from Testnet.
+            Off by default. When on: ignore the USD minimum and force $0 shipping on the shop
+            cart (mainnet or testnet). Independent of the Testnet checkbox.
           </span>
         </span>
       </label>

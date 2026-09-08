@@ -548,6 +548,7 @@ function RailPicker({
 }) {
   const cardOn = Boolean(settings.nexapayEnabled);
   const min = settings.btcMinCents ?? 2500;
+  // Skip $25 minimum when Test Bitcoin payments is on — independent of Testnet.
   const testBtc = Boolean(settings.testBitcoinPayments);
   const btcOn =
     Boolean(settings.btcEnabled) && (testBtc || dueCents >= min);

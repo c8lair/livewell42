@@ -696,8 +696,8 @@ export const placeOrder = createServerFn({ method: "POST" })
       settings.shipping_cents,
     );
     let total = merchandise - credit + ship;
-    // Match shop UI: Bitcoin enabled + test toggle → $0 shipping for card and BTC totals/quotes.
-    if (settings.btc_enabled && settings.test_bitcoin_payments) {
+    // Test Bitcoin payments alone (mainnet or testnet) → $0 shipping; not tied to btc_testnet.
+    if (settings.test_bitcoin_payments) {
       ship = 0;
       total = Math.max(0, merchandise - credit);
     }
