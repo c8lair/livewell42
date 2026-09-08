@@ -137,6 +137,9 @@ function MemberApp() {
           <p className="font-display text-xl tracking-tight">{settings.storeName}</p>
         </div>
         <div className="flex items-center gap-3 text-sm">
+          <Link to="/orders" className="text-muted hover:text-fg">
+            Orders
+          </Link>
           {me.isAdmin && me.legalAcceptedAt ? (
             <Link to="/admin" className="text-muted hover:text-fg">
               Admin
