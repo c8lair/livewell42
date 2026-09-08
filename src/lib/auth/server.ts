@@ -215,7 +215,73 @@ export const auth = betterAuth({
   session: { cookieCache: { enabled: true, maxAge: 300 } },
 
   // Local email/password — toggled only via `./email-password` (not a plugin).
-  ...(emailAndPasswordEnabled ? { emailAndPassword: { enabled: true } } : {}),
+  // sendResetPassword queues via mail_log (same pattern as order receipts).
+  ...(emailAndPasswordEnabled
+    ? {
+        emailAndPassword: {
+          enabled: true,
+          resetPasswordTokenExpiresIn: 3600,
+          sendResetPassword: async ({
+            user,
+            token,
+          }: {
+            user: { id: string; email: string; name: string };
+            url: string;
+            token: string;
+          }) => {
+            const { getSql } = await import("../db");
+            const { queueMail } = await import("../mail.server");
+            const sql = await getSql();
+            // Prefer credential (email/password) accounts only.
+            let hasCredential = false;
+            try {
+              const accounts = await sql<{ providerId: string }>`
+                select "providerId" as "providerId" from account
+                where "userId" = ${user.id}`;
+              hasCredential = accounts.some(
+                (a) => a.providerId === "credential",
+              );
+            } catch {
+              hasCredential = true; // fail open to still send reset if lookup fails
+            }
+            const base =
+              (process.env.BETTER_AUTH_URL ?? "").trim().replace(/\/+$/, "") ||
+              "https://livewell42.com";
+            if (!hasCredential) {
+              await queueMail(
+                "password-reset",
+                user.email,
+                "Livewell42 sign-in",
+                [
+                  `Hi${user.name ? ` ${user.name}` : ""},`,
+                  "",
+                  "This email is signed in with Google or another social provider,",
+                  "so there is no password to reset. Use Continue with Google (or X)",
+                  "on the sign-in page instead.",
+                  "",
+                  "If you did not request this, you can ignore this message.",
+                ].join("\n"),
+              );
+              return;
+            }
+            const link = `${base}/reset-password?token=${encodeURIComponent(token)}`;
+            await queueMail(
+              "password-reset",
+              user.email,
+              "Reset your Livewell42 password",
+              [
+                `Hi${user.name ? ` ${user.name}` : ""},`,
+                "",
+                "Use this one-time link to set a new password (expires in 1 hour):",
+                link,
+                "",
+                "If you did not request a reset, you can ignore this message.",
+              ].join("\n"),
+            );
+          },
+        },
+      }
+    : {}),
 
   // `__Host-` prefixed cookies: the browser REFUSES any same-named cookie that
   // carries a `Domain` attribute, so a sibling `*.grok.me` app cannot "toss" a

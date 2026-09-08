@@ -94,13 +94,21 @@ function Login() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
-            <button
-              type="button"
-              className="mt-1 text-xs text-gray-400 underline-offset-4 hover:underline"
-              onClick={() => setShowPassword((v) => !v)}
-            >
-              {showPassword ? "Hide password" : "Show password"}
-            </button>
+            <div className="mt-1 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                className="text-xs text-gray-400 underline-offset-4 hover:underline"
+                onClick={() => setShowPassword((v) => !v)}
+              >
+                {showPassword ? "Hide password" : "Show password"}
+              </button>
+              <Link
+                to="/forgot-password"
+                className="text-xs text-accent underline-offset-4 hover:underline"
+              >
+                Forgot password
+              </Link>
+            </div>
           </div>
 
           <div className="space-y-1 rounded-lg border border-border bg-surface px-3 py-2">
