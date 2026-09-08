@@ -135,36 +135,28 @@ export async function createBtcProductOrder(
     };
   }
 
-  // Assign/reuse profile.btc_address
-  const profiles = await sql<{
-    btc_address: string;
-    btc_derivation_index: number | null;
-  }>`select btc_address, btc_derivation_index from profiles where user_id = ${input.userId}`;
-  let address = (profiles[0]?.btc_address ?? "").trim();
-  let derIndex = profiles[0]?.btc_derivation_index;
-
-  if (!address) {
-    const locked = await sql<{
-      btc_next_index: number;
-      btc_zpub: string;
-      btc_testnet: boolean;
-    }>`
-      update store_settings
-      set btc_next_index = btc_next_index + 1
-      where id = 1
-      returning btc_next_index, btc_zpub, btc_testnet`;
-    const nextAfter = locked[0]?.btc_next_index ?? 1;
-    derIndex = nextAfter - 1;
-    address = deriveAddress(
-      locked[0]?.btc_zpub || btc.btc_zpub,
-      derIndex,
-      Boolean(locked[0]?.btc_testnet ?? btc.btc_testnet),
-    );
-    await sql`
-      update profiles
-      set btc_address = ${address}, btc_derivation_index = ${derIndex}
-      where user_id = ${input.userId}`;
-  }
+  // New address per invoice. Reusing the profile address lets a prior
+  // confirmed payment immediately mark the next quote paid.
+  const locked = await sql<{
+    btc_next_index: number;
+    btc_zpub: string;
+    btc_testnet: boolean;
+  }>`
+    update store_settings
+    set btc_next_index = btc_next_index + 1
+    where id = 1
+    returning btc_next_index, btc_zpub, btc_testnet`;
+  const nextAfter = locked[0]?.btc_next_index ?? 1;
+  const derIndex = nextAfter - 1;
+  const address = deriveAddress(
+    locked[0]?.btc_zpub || btc.btc_zpub,
+    derIndex,
+    Boolean(locked[0]?.btc_testnet ?? btc.btc_testnet),
+  );
+  await sql`
+    update profiles
+    set btc_address = ${address}, btc_derivation_index = ${derIndex}
+    where user_id = ${input.userId}`;
 
   const { rate, source } = await getBtcUsdRate();
   const btcAmount = usdCentsToBtc(input.total, rate);
@@ -278,10 +270,8 @@ export async function loadBtcPaymentView(token: string): Promise<BtcPaymentView>
       throw new Error("Payment not found.");
     }
     const remaining = remainingBtc(o.btc_amount, o.btc_received || "0");
-    // Always show original quote amount (no remaining top-up QR)
     const amountForQr = o.btc_amount;
     const paid = o.status === "paid" || o.btc_status === "paid";
-    // Legacy underpaid → seen for customer UI (no underpay copy)
     const customerStatus =
       o.btc_status === "underpaid" ? "seen" : o.btc_status || "waiting";
     const view: BtcPaymentView = {
@@ -333,7 +323,6 @@ export async function refreshBtcPaymentQuote(token: string): Promise<BtcPaymentV
     if (o.btc_status === "cancelled") {
       throw new Error("This quote was cancelled.");
     }
-    // Any inbound sats: do not invent a new quote / reprice
     if (btcToSats(o.btc_received || "0") > 0n) {
       throw new Error(
         "Payment already detected on this address — quote cannot be refreshed.",
@@ -359,7 +348,6 @@ export async function refreshBtcPaymentQuote(token: string): Promise<BtcPaymentV
         btc_status = 'waiting'
       where id = ${o.id} and status = 'pending'`;
 
-    // Return fresh view (re-run watcher + load)
     try {
       await processBtcOrderByToken(token);
     } catch {
@@ -386,8 +374,7 @@ export async function refreshBtcPaymentQuote(token: string): Promise<BtcPaymentV
       limit 1`;
     const f = fresh[0];
     if (!f || !f.btc_address || !f.btc_amount) throw new Error("Payment not found.");
-    const rem = remainingBtc(f.btc_amount, f.btc_received || "0");
-    const amountForQr = f.btc_amount;
+    const remaining = remainingBtc(f.btc_amount, f.btc_received || "0");
     const customerStatus =
       f.btc_status === "underpaid" ? "seen" : f.btc_status || "waiting";
     return {
@@ -397,9 +384,9 @@ export async function refreshBtcPaymentQuote(token: string): Promise<BtcPaymentV
       usdTotalCents: f.usd_total_cents ?? f.total_cents,
       btcAmount: f.btc_amount,
       btcReceived: f.btc_received || "0",
-      btcRemaining: rem,
+      btcRemaining: remaining,
       address: f.btc_address,
-      bip21: buildBip21(f.btc_address, amountForQr),
+      bip21: buildBip21(f.btc_address, f.btc_amount),
       quoteExpiresAt: f.quote_expires_at,
       txid: f.btc_txid || "",
       explorerTxUrl: f.btc_txid ? explorerTxUrl(f.btc_txid, btc.btc_testnet) : null,
