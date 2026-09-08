@@ -1127,13 +1127,3 @@ export const adminSalesCsv = createServerFn({ method: "GET" })
     return [header, ...lines].join("\n");
   });
 
-
-/** Bitcoin payment page + admin BTC actions (server fns). */
-export {
-  getBtcPayment,
-  refreshBtcQuote,
-  adminCancelBtcQuote,
-  adminMarkBtcPaid,
-  adminNoteUnmatched,
-  type BtcPaymentView,
-} from "@/lib/btc/checkout.server";

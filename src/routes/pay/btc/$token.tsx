@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import QRCode from "qrcode";
-import { getBtcPayment, refreshBtcQuote, type BtcPaymentView } from "@/lib/store";
+import { getBtcPayment, refreshBtcQuote, type BtcPaymentView } from "@/lib/btc/payment";
 import { cents } from "@/lib/money";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";

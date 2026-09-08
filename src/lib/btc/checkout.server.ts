@@ -1,10 +1,7 @@
 /**
- * Bitcoin product-order quote creation + payment-page server fns.
+ * Bitcoin product-order quote creation + payment-page server logic.
  * Never returns zpub to callers.
  */
-import { createServerFn } from "@tanstack/react-start";
-import { z } from "zod";
-import { authMiddleware } from "@/lib/auth/middleware";
 import { randomBytes } from "node:crypto";
 import { getSql } from "@/lib/db";
 import { deriveAddress, isZpubConfigured } from "./zpub.server";
@@ -17,6 +14,7 @@ import {
 } from "./rates.server";
 import { processBtcOrderByToken } from "./watch.server";
 import { explorerTxUrl } from "./mempool.server";
+import type { BtcPaymentView } from "./types";
 
 const SITE_ORIGIN = "https://livewell42.com";
 const QUOTE_MINUTES = 15;
@@ -250,25 +248,6 @@ export async function createBtcProductOrder(
   };
 }
 
-export type BtcPaymentView = {
-  orderNumber: string;
-  status: string;
-  btcStatus: string;
-  usdTotalCents: number;
-  btcAmount: string;
-  btcReceived: string;
-  btcRemaining: string;
-  address: string;
-  bip21: string;
-  quoteExpiresAt: string | null;
-  txid: string;
-  explorerTxUrl: string | null;
-  testnet: boolean;
-  testBitcoinPayments: boolean;
-  overpayNote: string;
-  paid: boolean;
-};
-
 function buildBip21(address: string, amount: string, label = "Livewell42"): string {
   const params = new URLSearchParams();
   params.set("amount", amount);
@@ -276,13 +255,11 @@ function buildBip21(address: string, amount: string, label = "Livewell42"): stri
   return `bitcoin:${address}?${params.toString()}`;
 }
 
-export const getBtcPayment = createServerFn({ method: "GET" })
-  .validator(z.object({ token: z.string().trim().min(8).max(128) }))
-  .handler(async ({ data }) => {
+export async function loadBtcPaymentView(token: string): Promise<BtcPaymentView> {
     const sql = await getSql();
     // Trigger watcher for this order
     try {
-      await processBtcOrderByToken(data.token);
+      await processBtcOrderByToken(token);
     } catch {
       /* ignore poll errors — still return quote */
     }
@@ -305,7 +282,7 @@ export const getBtcPayment = createServerFn({ method: "GET" })
         btc_amount, btc_received, btc_address, quote_expires_at, btc_txid,
         btc_overpay_note
       from orders
-      where payment_token = ${data.token} and deleted_at is null
+      where payment_token = ${token} and deleted_at is null
       limit 1`;
     const o = rows[0];
     if (!o || !o.btc_address || !o.btc_amount) {
@@ -338,11 +315,9 @@ export const getBtcPayment = createServerFn({ method: "GET" })
       paid,
     };
     return view;
-  });
+}
 
-export const refreshBtcQuote = createServerFn({ method: "POST" })
-  .validator(z.object({ token: z.string().trim().min(8).max(128) }))
-  .handler(async ({ data }) => {
+export async function refreshBtcPaymentQuote(token: string): Promise<BtcPaymentView> {
     const sql = await getSql();
     const rows = await sql<{
       id: number;
@@ -356,7 +331,7 @@ export const refreshBtcQuote = createServerFn({ method: "POST" })
     }>`
       select id, status, btc_status, btc_amount, btc_received, btc_address,
         usd_total_cents, total_cents
-      from orders where payment_token = ${data.token} and deleted_at is null
+      from orders where payment_token = ${token} and deleted_at is null
       limit 1`;
     const o = rows[0];
     if (!o || !o.btc_address || !o.btc_amount) {
@@ -408,7 +383,7 @@ export const refreshBtcQuote = createServerFn({ method: "POST" })
 
     // Return fresh view (re-run watcher + load)
     try {
-      await processBtcOrderByToken(data.token);
+      await processBtcOrderByToken(token);
     } catch {
       /* ignore */
     }
@@ -429,7 +404,7 @@ export const refreshBtcQuote = createServerFn({ method: "POST" })
       select order_number, status, btc_status, usd_total_cents, total_cents,
         btc_amount, btc_received, btc_address, quote_expires_at, btc_txid,
         btc_overpay_note
-      from orders where payment_token = ${data.token} and deleted_at is null
+      from orders where payment_token = ${token} and deleted_at is null
       limit 1`;
     const f = fresh[0];
     if (!f || !f.btc_address || !f.btc_amount) throw new Error("Payment not found.");
@@ -454,7 +429,7 @@ export const refreshBtcQuote = createServerFn({ method: "POST" })
       overpayNote: f.btc_overpay_note || "",
       paid: f.status === "paid" || f.btc_status === "paid",
     } satisfies BtcPaymentView;
-  });
+}
 
 async function requireAdminUser(userId: string) {
   const sql = await getSql();
@@ -463,55 +438,45 @@ async function requireAdminUser(userId: string) {
   if (!rows[0]?.is_admin) throw new Error("Admin only.");
 }
 
-export const adminCancelBtcQuote = createServerFn({ method: "POST" })
-  .validator(z.object({ orderId: z.number().int() }))
-  .middleware([authMiddleware])
-  .handler(async ({ context, data }) => {
-    await requireAdminUser(context.userId);
-    const sql = await getSql();
-    await sql`
-      update orders set btc_status = 'cancelled'
-      where id = ${data.orderId}
-        and payment_rail = 'btc'
-        and status = 'pending'`;
-    return { ok: true as const };
-  });
+export async function cancelBtcQuote(userId: string, orderId: number) {
+  await requireAdminUser(userId);
+  const sql = await getSql();
+  await sql`
+    update orders set btc_status = 'cancelled'
+    where id = ${orderId}
+      and payment_rail = 'btc'
+      and status = 'pending'`;
+  return { ok: true as const };
+}
 
-export const adminMarkBtcPaid = createServerFn({ method: "POST" })
-  .validator(
-    z.object({
-      orderId: z.number().int(),
-      txid: z.string().trim().max(128).optional(),
-    }),
-  )
-  .middleware([authMiddleware])
-  .handler(async ({ context, data }) => {
-    await requireAdminUser(context.userId);
-    const { finalizeBtcOrderPaid } = await import("./watch.server");
-    const sql = await getSql();
-    const rows = await sql<{
-      btc_amount: string | null;
-      btc_txid: string;
-      btc_received: string;
-    }>`select btc_amount, btc_txid, btc_received from orders where id = ${data.orderId}`;
-    const o = rows[0];
-    if (!o) throw new Error("Order not found.");
-    await finalizeBtcOrderPaid(data.orderId, {
-      txid: (data.txid || o.btc_txid || "manual").trim(),
-      receivedBtc: o.btc_received && o.btc_received !== "0"
-        ? o.btc_received
-        : o.btc_amount || "0",
-      overpayNote: "Marked paid manually by admin",
-    });
-    return { ok: true as const };
+export async function markBtcPaid(
+  userId: string,
+  orderId: number,
+  txid?: string,
+) {
+  await requireAdminUser(userId);
+  const { finalizeBtcOrderPaid } = await import("./watch.server");
+  const sql = await getSql();
+  const rows = await sql<{
+    btc_amount: string | null;
+    btc_txid: string;
+    btc_received: string;
+  }>`select btc_amount, btc_txid, btc_received from orders where id = ${orderId}`;
+  const o = rows[0];
+  if (!o) throw new Error("Order not found.");
+  await finalizeBtcOrderPaid(orderId, {
+    txid: (txid || o.btc_txid || "manual").trim(),
+    receivedBtc: o.btc_received && o.btc_received !== "0"
+      ? o.btc_received
+      : o.btc_amount || "0",
+    overpayNote: "Marked paid manually by admin",
   });
+  return { ok: true as const };
+}
 
-export const adminNoteUnmatched = createServerFn({ method: "POST" })
-  .validator(z.object({ id: z.number().int() }))
-  .middleware([authMiddleware])
-  .handler(async ({ context, data }) => {
-    await requireAdminUser(context.userId);
-    const sql = await getSql();
-    await sql`update btc_unmatched_payments set noted = true where id = ${data.id}`;
-    return { ok: true as const };
-  });
+export async function noteUnmatchedPayment(userId: string, id: number) {
+  await requireAdminUser(userId);
+  const sql = await getSql();
+  await sql`update btc_unmatched_payments set noted = true where id = ${id}`;
+  return { ok: true as const };
+}
