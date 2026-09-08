@@ -215,6 +215,7 @@ function Shop({
   const [state, setState] = useState("TX");
   const [zip, setZip] = useState("");
   const [rail, setRail] = useState<Rail>("card");
+  const [payStep, setPayStep] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const lines = products
@@ -228,14 +229,22 @@ function Shop({
   const ship = settings.testBitcoinPayments ? 0 : normalShip;
   const due = merchandise - credit + ship;
 
+  const cardOn = Boolean(settings.nexapayEnabled);
+  const btcMin = settings.btcMinCents ?? 2500;
+  const testBtc = Boolean(settings.testBitcoinPayments);
+  const btcOn = Boolean(settings.btcEnabled) && (testBtc || due >= btcMin);
+  const canPay = merchandise > 0 && (cardOn || btcOn);
+
   function setQ(id: number, next: number, stock: number) {
     setQty((q) => ({ ...q, [id]: Math.max(0, Math.min(stock, next)) }));
   }
 
-  async function checkout() {
+  function validateShipping():
+    | { ok: true; shipName: string; shipStreet: string; shipCity: string; shipState: string; shipZip: string }
+    | { ok: false } {
     if (!lines.length) {
       toast.error("Add a quantity first.");
-      return;
+      return { ok: false };
     }
     const shipName = name.trim();
     const shipStreet = street.trim();
@@ -244,14 +253,38 @@ function Shop({
     const shipZip = zip.trim();
     if (shipZip && !/^\d{5}(-\d{4})?$/.test(shipZip)) {
       toast.error("Error: enter a 5-digit ZIP");
-      return;
+      return { ok: false };
     }
     if (!shipState || shipState.length !== 2) {
       toast.error("Error: choose a state we ship to");
-      return;
+      return { ok: false };
     }
     if (!shipName || !shipStreet || !shipCity || !shipZip) {
       toast.error("Error: please enter shipping address");
+      return { ok: false };
+    }
+    return { ok: true, shipName, shipStreet, shipCity, shipState, shipZip };
+  }
+
+  function openPayStep() {
+    if (!canPay) return;
+    const v = validateShipping();
+    if (!v.ok) return;
+    // Default: card when on, else bitcoin when available.
+    setRail(cardOn ? "card" : "btc");
+    setPayStep(true);
+  }
+
+  async function checkout() {
+    const v = validateShipping();
+    if (!v.ok) return;
+    const selected: Rail = cardOn && rail === "card" ? "card" : btcOn && rail === "btc" ? "btc" : cardOn ? "card" : "btc";
+    if (selected === "card" && !cardOn) {
+      toast.error("Card checkout is off");
+      return;
+    }
+    if (selected === "btc" && !btcOn) {
+      toast.error("Bitcoin checkout is not available for this order.");
       return;
     }
     setBusy(true);
@@ -259,12 +292,12 @@ function Shop({
       const res = await placeOrder({
         data: {
           items: lines.map((l) => ({ productId: l.product.id, qty: l.qty })),
-          shipName,
-          shipStreet,
-          shipCity,
-          shipState,
-          shipZip,
-          rail,
+          shipName: v.shipName,
+          shipStreet: v.shipStreet,
+          shipCity: v.shipCity,
+          shipState: v.shipState,
+          shipZip: v.shipZip,
+          rail: selected,
         },
       });
       if (res && "checkoutUrl" in res && res.checkoutUrl) {
@@ -281,6 +314,7 @@ function Shop({
       }
       toast.success(`Order ${res.orderNumber} placed · ${cents(res.totalCents)}`);
       setQty({});
+      setPayStep(false);
       onPaid();
     } catch (err) {
       const raw = err instanceof Error ? err.message : "";
@@ -295,8 +329,23 @@ function Shop({
     }
   }
 
+  // Keep selection valid if availability changes while the method step is open.
+  useEffect(() => {
+    if (!payStep) return;
+    if (rail === "card" && !cardOn && btcOn) setRail("btc");
+    if (rail === "btc" && !btcOn && cardOn) setRail("card");
+  }, [payStep, rail, cardOn, btcOn]);
+
+  // Close method step if cart empties or no rails remain.
+  useEffect(() => {
+    if (!canPay && payStep) setPayStep(false);
+  }, [canPay, payStep]);
+
   const peptides = products.filter((p) => p.category === "peptide");
   const water = products.filter((p) => p.category !== "peptide");
+
+  const effectiveRail: Rail =
+    rail === "btc" && btcOn ? "btc" : cardOn ? "card" : btcOn ? "btc" : "card";
 
   return (
     <main className="mx-auto max-w-3xl px-5">
@@ -338,7 +387,6 @@ function Shop({
           <Label>ZIP</Label>
           <Input value={zip} onChange={(e) => setZip(e.target.value)} required />
         </div>
-        <RailPicker value={rail} onChange={setRail} settings={settings} amountLabel={cents(due)} dueCents={due} />
       </section>
 
       <div className="pointer-events-none fixed inset-x-0 bottom-0 z-20 p-3">
@@ -355,105 +403,83 @@ function Shop({
                 Due {cents(due)}
               </p>
             </div>
-            <Button disabled={busy || merchandise === 0 || (!settings.nexapayEnabled && !(settings.btcEnabled && (settings.testBitcoinPayments || due >= (settings.btcMinCents ?? 2500))))} onClick={() => void checkout()}>
-              {busy ? "Placing…" : "Pay now"}
-            </Button>
+            {!payStep ? (
+              <Button disabled={busy || !canPay} onClick={openPayStep}>
+                Pay now
+              </Button>
+            ) : (
+              <Button variant="ghost" disabled={busy} onClick={() => setPayStep(false)}>
+                Back
+              </Button>
+            )}
           </div>
+
+          {payStep ? (
+            <div className="mt-4 space-y-3 border-t border-border pt-4">
+              <p className="text-xs text-muted">Choose how to pay {cents(due)}</p>
+
+              <button
+                type="button"
+                disabled={!cardOn}
+                onClick={() => cardOn && setRail("card")}
+                className={`w-full rounded-md border px-3 py-3 text-left ${
+                  !cardOn
+                    ? "cursor-not-allowed border-border/60 opacity-50"
+                    : effectiveRail === "card"
+                      ? "border-accent bg-raised text-fg"
+                      : "border-border text-muted hover:bg-raised/40"
+                }`}
+              >
+                <CardRailMarks />
+                <p className="mt-1.5 text-sm font-medium text-fg">Card</p>
+                {cardOn ? (
+                  <p className="text-xs leading-relaxed text-faint">
+                    Visa, Mastercard, Apple Pay, Google Pay
+                  </p>
+                ) : (
+                  <p className="text-xs leading-relaxed text-muted">Card checkout is off</p>
+                )}
+              </button>
+
+              {btcOn ? (
+                <button
+                  type="button"
+                  onClick={() => setRail("btc")}
+                  className={`w-full rounded-md border px-3 py-3 text-left text-sm ${
+                    effectiveRail === "btc" ? "border-accent bg-raised text-fg" : "border-border text-muted hover:bg-raised/40"
+                  }`}
+                >
+                  <span className="font-medium text-fg">Pay with Bitcoin</span>
+                  {effectiveRail === "btc" ? (
+                    <p className="mt-1 text-xs leading-relaxed text-faint">
+                      You will get a 15-minute Bitcoin quote with a QR code. Payment confirms
+                      after 1 on-chain confirmation.
+                      {settings.btcTestnet ? " (Testnet mode is on.)" : ""}
+                    </p>
+                  ) : null}
+                </button>
+              ) : settings.btcEnabled && !testBtc && due > 0 && due < btcMin ? (
+                <p className="text-xs text-faint">
+                  Bitcoin available for orders of {cents(btcMin)} or more.
+                </p>
+              ) : null}
+
+              {!cardOn && !btcOn ? (
+                <p className="text-sm text-muted">No payment methods are available right now.</p>
+              ) : null}
+
+              <Button
+                className="w-full sm:w-auto"
+                disabled={busy || (!cardOn && !btcOn) || (effectiveRail === "card" && !cardOn) || (effectiveRail === "btc" && !btcOn)}
+                onClick={() => void checkout()}
+              >
+                {busy ? "Placing…" : effectiveRail === "btc" ? "Continue with Bitcoin" : "Continue with Card"}
+              </Button>
+            </div>
+          ) : null}
         </div>
       </div>
     </main>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <p className="flex gap-3 text-muted">
-      <span>{label}</span>
-      <span className="text-fg">{value}</span>
-    </p>
-  );
-}
-
-function ProductGroup({
-  title,
-  products,
-  qty,
-  setQ,
-}: {
-  title: string;
-  products: Product[];
-  qty: Record<number, number>;
-  setQ: (id: number, next: number, stock: number) => void;
-}) {
-  if (!products.length) return null;
-  return (
-    <section className="mt-8">
-      <h2 className="font-display text-2xl">{title}</h2>
-      <ul className="mt-3 divide-y divide-border border-y border-border">
-        {products.map((p) => {
-          const sold = p.stock <= 0;
-          const q = qty[p.id] ?? 0;
-          return (
-            <li
-              key={p.id}
-              className={`flex items-center gap-3 py-4 ${sold ? "opacity-40" : ""}`}
-            >
-              <div className="min-w-0 flex-1">
-                <p className="font-medium">
-                  {p.name}{" "}
-                  <span className="font-normal text-muted">{p.sizeLabel}</span>
-                </p>
-                <p className="mt-0.5 flex flex-wrap items-center gap-x-3 text-sm text-muted">
-                  <span>{cents(p.priceCents)}</span>
-                  {sold ? (
-                    <span>Sold out</span>
-                  ) : p.stock < 5 ? (
-                    <span className="text-yellow-400">{p.stock} in stock</span>
-                  ) : null}
-                  {p.coaUrl ? (
-                    <a
-                      href={p.coaUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1 text-accent hover:underline"
-                    >
-                      <FileText className="size-3.5" />
-                      COA
-                    </a>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 text-faint">
-                      <FileText className="size-3.5" />
-                      COA
-                    </span>
-                  )}
-                </p>
-              </div>
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  disabled={sold}
-                  className="grid size-11 place-items-center rounded-md border border-border"
-                  onClick={() => setQ(p.id, q - 1, p.stock)}
-                  aria-label="Decrease"
-                >
-                  <Minus className="size-4" />
-                </button>
-                <span className="w-8 text-center tabular-nums">{q}</span>
-                <button
-                  type="button"
-                  disabled={sold}
-                  className="grid size-11 place-items-center rounded-md border border-border"
-                  onClick={() => setQ(p.id, q + 1, p.stock)}
-                  aria-label="Increase"
-                >
-                  <Plus className="size-4" />
-                </button>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
   );
 }
 
@@ -549,87 +575,6 @@ function CardRailMarks() {
           </text>
         </svg>
       </span>
-    </div>
-  );
-}
-
-function RailPicker({
-  value,
-  onChange,
-  settings,
-  amountLabel,
-  dueCents,
-}: {
-  value: Rail;
-  onChange: (r: Rail) => void;
-  settings: PublicSettings;
-  amountLabel: string;
-  dueCents: number;
-}) {
-  const cardOn = Boolean(settings.nexapayEnabled);
-  const min = settings.btcMinCents ?? 2500;
-  // Skip $25 minimum when Test Bitcoin payments is on — independent of Testnet.
-  const testBtc = Boolean(settings.testBitcoinPayments);
-  const btcOn =
-    Boolean(settings.btcEnabled) && (testBtc || dueCents >= min);
-
-  useEffect(() => {
-    if (cardOn && (!btcOn || value !== "btc")) {
-      if (value !== "card") onChange("card");
-      return;
-    }
-    if (!cardOn && btcOn && value !== "btc") onChange("btc");
-    if (!btcOn && value === "btc" && cardOn) onChange("card");
-  }, [cardOn, btcOn, value, onChange]);
-
-  const effective: Rail =
-    cardOn && (!btcOn || value !== "btc") ? "card" : btcOn ? "btc" : "card";
-
-  return (
-    <div className="mt-4 space-y-3">
-      <p className="text-xs text-muted">Pay {amountLabel}</p>
-      {cardOn ? (
-        <div
-          className={`space-y-1.5 ${btcOn ? "cursor-pointer rounded-md border border-transparent p-1" : ""} ${
-            effective === "card" && btcOn ? "border-accent bg-raised/40" : ""
-          }`}
-          onClick={btcOn ? () => onChange("card") : undefined}
-          onKeyDown={undefined}
-          role={btcOn ? "button" : undefined}
-        >
-          <CardRailMarks />
-          <p className="text-xs leading-relaxed text-faint">
-            Visa, Mastercard, Apple Pay, Google Pay
-          </p>
-        </div>
-      ) : (
-        <p className="text-sm text-muted">Card checkout is temporarily off.</p>
-      )}
-      {btcOn ? (
-        <button
-          type="button"
-          onClick={() => onChange("btc")}
-          className={`w-full rounded-md border px-3 py-3 text-left text-sm sm:max-w-xs ${
-            effective === "btc" ? "border-accent bg-raised text-fg" : "border-border text-muted"
-          }`}
-        >
-          Pay with Bitcoin
-        </button>
-      ) : settings.btcEnabled && !testBtc && dueCents > 0 && dueCents < min ? (
-        <p className="text-xs text-faint">
-          Bitcoin available for orders of {cents(min)} or more.
-        </p>
-      ) : null}
-      {effective === "btc" ? (
-        <p className="text-xs leading-relaxed text-faint">
-          You will get a 15-minute Bitcoin quote with a QR code. Payment confirms
-          after 1 on-chain confirmation.
-          {settings.btcTestnet ? " (Testnet mode is on.)" : ""}
-        </p>
-      ) : null}
-      {!cardOn && !btcOn ? (
-        <p className="text-sm text-muted">No payment methods are available right now.</p>
-      ) : null}
     </div>
   );
 }
