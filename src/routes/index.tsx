@@ -483,6 +483,99 @@ function Shop({
   );
 }
 
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <p className="flex gap-3 text-muted">
+      <span>{label}</span>
+      <span className="text-fg">{value}</span>
+    </p>
+  );
+}
+
+function ProductGroup({
+  title,
+  products,
+  qty,
+  setQ,
+}: {
+  title: string;
+  products: Product[];
+  qty: Record<number, number>;
+  setQ: (id: number, next: number, stock: number) => void;
+}) {
+  if (!products.length) return null;
+  return (
+    <section className="mt-8">
+      <h2 className="font-display text-2xl">{title}</h2>
+      <ul className="mt-3 divide-y divide-border border-y border-border">
+        {products.map((p) => {
+          const sold = p.stock <= 0;
+          const q = qty[p.id] ?? 0;
+          return (
+            <li
+              key={p.id}
+              className={`flex items-center gap-3 py-4 ${sold ? "opacity-40" : ""}`}
+            >
+              <div className="min-w-0 flex-1">
+                <p className="font-medium">
+                  {p.name}{" "}
+                  <span className="font-normal text-muted">{p.sizeLabel}</span>
+                </p>
+                <p className="mt-0.5 flex flex-wrap items-center gap-x-3 text-sm text-muted">
+                  <span>{cents(p.priceCents)}</span>
+                  {sold ? (
+                    <span>Sold out</span>
+                  ) : p.stock < 5 ? (
+                    <span className="text-yellow-400">{p.stock} in stock</span>
+                  ) : null}
+                  {p.coaUrl ? (
+                    <a
+                      href={p.coaUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-accent hover:underline"
+                    >
+                      <FileText className="size-3.5" />
+                      COA
+                    </a>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-faint">
+                      <FileText className="size-3.5" />
+                      COA
+                    </span>
+                  )}
+                </p>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  disabled={sold}
+                  className="grid size-11 place-items-center rounded-md border border-border"
+                  onClick={() => setQ(p.id, q - 1, p.stock)}
+                  aria-label="Decrease"
+                >
+                  <Minus className="size-4" />
+                </button>
+                <span className="w-8 text-center tabular-nums">{q}</span>
+                <button
+                  type="button"
+                  disabled={sold}
+                  className="grid size-11 place-items-center rounded-md border border-border"
+                  onClick={() => setQ(p.id, q + 1, p.stock)}
+                  aria-label="Increase"
+                >
+                  <Plus className="size-4" />
+                </button>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 function CardRailMarks() {
   const pill =
     "inline-flex h-[44px] w-[68px] shrink-0 items-center justify-center rounded-md border border-border/70 bg-black/40 px-1.5";
