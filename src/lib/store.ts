@@ -152,8 +152,42 @@ export async function getNexapayWebhookSecret(): Promise<string> {
   return process.env.NEXAPAY_WEBHOOK_SECRET?.trim() ?? "";
 }
 
+async function ensureStoreSettingsColumns(sql: Awaited<ReturnType<typeof getSql>>) {
+  // Idempotent — production Neon does not auto-migrate on boot unless startup runs
+  // db:migrate; Admin Save and every settings load must still work.
+  await sql.query(
+    "alter table store_settings add column if not exists nexapay_webhook_secret text",
+  );
+  await sql.query(
+    "alter table store_settings add column if not exists btc_zpub text not null default ''",
+  );
+  await sql.query(
+    "alter table store_settings add column if not exists btc_next_index integer not null default 0",
+  );
+  await sql.query(
+    "alter table store_settings add column if not exists btc_min_cents integer not null default 2500",
+  );
+  await sql.query(
+    "alter table store_settings add column if not exists btc_testnet boolean not null default false",
+  );
+  await sql.query(
+    "alter table store_settings add column if not exists test_bitcoin_payments boolean not null default false",
+  );
+  await sql.query(
+    "alter table store_settings add column if not exists btc_enabled boolean not null default false",
+  );
+  await sql.query(
+    "alter table store_settings add column if not exists nexapay_enabled boolean not null default true",
+  );
+}
+
 async function loadSettings(): Promise<SettingsRow> {
   const sql = await getSql();
+  try {
+    await ensureStoreSettingsColumns(sql);
+  } catch {
+    /* keep going — select may still work if columns already exist */
+  }
   const empty: SettingsRow = {
     store_name: "Livewell42",
     support_email: "support@example.com",
@@ -181,7 +215,7 @@ async function loadSettings(): Promise<SettingsRow> {
     const rows = await sql<Row>`select store_name, support_email, owner_email, shipping_cents, free_shipping_at_cents, nexapay_api_key, nexapay_webhook_secret, usdc_wallet, btc_wallet, banner_enabled, banner_text, btc_enabled, nexapay_enabled, btc_zpub, btc_next_index, btc_min_cents, btc_testnet, test_bitcoin_payments from store_settings where id = 1`;
     r = rows[0];
   } catch {
-    // Column may be missing before migration 0010 applies — keep Admin/shop up.
+    // Older DBs may lack some columns — load a core row, then overlay BTC flags.
     try {
       const rows = await sql<{
         store_name: string;
@@ -197,15 +231,41 @@ async function loadSettings(): Promise<SettingsRow> {
         btc_enabled: boolean;
         nexapay_enabled: boolean;
       }>`select store_name, support_email, owner_email, shipping_cents, free_shipping_at_cents, nexapay_api_key, usdc_wallet, btc_wallet, banner_enabled, banner_text, btc_enabled, nexapay_enabled from store_settings where id = 1`;
+      let testBitcoinPayments = false;
+      let btcTestnet = false;
+      let btcMinCents = 2500;
+      let btcZpub = "";
+      let btcNextIndex = 0;
+      let webhookSecret = "";
+      try {
+        const extra = await sql<{
+          test_bitcoin_payments: boolean;
+          btc_testnet: boolean;
+          btc_min_cents: number;
+          btc_zpub: string;
+          btc_next_index: number;
+          nexapay_webhook_secret: string | null;
+        }>`select test_bitcoin_payments, btc_testnet, btc_min_cents, btc_zpub, btc_next_index, nexapay_webhook_secret from store_settings where id = 1`;
+        if (extra[0]) {
+          testBitcoinPayments = Boolean(extra[0].test_bitcoin_payments);
+          btcTestnet = Boolean(extra[0].btc_testnet);
+          btcMinCents = extra[0].btc_min_cents ?? 2500;
+          btcZpub = extra[0].btc_zpub ?? "";
+          btcNextIndex = extra[0].btc_next_index ?? 0;
+          webhookSecret = extra[0].nexapay_webhook_secret ?? "";
+        }
+      } catch {
+        /* columns still missing */
+      }
       r = rows[0]
         ? {
             ...rows[0],
-            nexapay_webhook_secret: "",
-            btc_zpub: "",
-            btc_next_index: 0,
-            btc_min_cents: 2500,
-            btc_testnet: false,
-            test_bitcoin_payments: false,
+            nexapay_webhook_secret: webhookSecret,
+            btc_zpub: btcZpub,
+            btc_next_index: btcNextIndex,
+            btc_min_cents: btcMinCents,
+            btc_testnet: btcTestnet,
+            test_bitcoin_payments: testBitcoinPayments,
           }
         : undefined;
     } catch {
@@ -229,8 +289,10 @@ async function loadSettings(): Promise<SettingsRow> {
   r.btc_zpub = r.btc_zpub ?? "";
   r.btc_next_index = r.btc_next_index ?? 0;
   r.btc_min_cents = r.btc_min_cents ?? 2500;
-  r.btc_testnet = Boolean(r.btc_testnet);
-  r.test_bitcoin_payments = Boolean(r.test_bitcoin_payments);
+  const asOn = (v: unknown) =>
+    v === true || v === "t" || v === "true" || v === 1 || v === "1";
+  r.btc_testnet = asOn(r.btc_testnet);
+  r.test_bitcoin_payments = asOn(r.test_bitcoin_payments);
   return r;
 }
 
@@ -983,28 +1045,14 @@ export const adminSaveSettings = createServerFn({ method: "POST" })
     const freeAt = Math.round(Number(data.freeAtDollars) * 100);
     const sql = await getSql();
 
-    // Make sure the column exists before writing (safe if already present).
-    await sql.query(
-      "alter table store_settings add column if not exists nexapay_webhook_secret text",
-    );
+    await ensureStoreSettingsColumns(sql);
 
     const btcMin = Math.round(Number(data.btcMinDollars) * 100);
     if (!Number.isFinite(btcMin) || btcMin < 0) {
       throw new Error("Invalid Bitcoin minimum.");
     }
 
-    await sql.query(
-      "alter table store_settings add column if not exists btc_zpub text not null default ''",
-    );
-    await sql.query(
-      "alter table store_settings add column if not exists btc_min_cents integer not null default 2500",
-    );
-    await sql.query(
-      "alter table store_settings add column if not exists btc_testnet boolean not null default false",
-    );
-    await sql.query(
-      "alter table store_settings add column if not exists test_bitcoin_payments boolean not null default false",
-    );
+    const testBitcoinPayments = Boolean(data.testBitcoinPayments);
 
     await sql`update store_settings set
       store_name = ${data.storeName},
@@ -1021,7 +1069,7 @@ export const adminSaveSettings = createServerFn({ method: "POST" })
       nexapay_enabled = ${data.nexapayEnabled},
       btc_min_cents = ${btcMin},
       btc_testnet = ${data.btcTestnet},
-      test_bitcoin_payments = ${data.testBitcoinPayments}
+      test_bitcoin_payments = ${testBitcoinPayments}
       where id = 1`;
 
     const webhookSecret = String(data.nexapayWebhookSecret ?? "").trim();
@@ -1046,10 +1094,22 @@ export const adminSaveSettings = createServerFn({ method: "POST" })
       (check[0]?.nexapay_webhook_secret ?? "").trim(),
     );
     const btcZpubConfigured = Boolean((check[0]?.btc_zpub ?? "").trim());
+    const asOnFlag = (v: unknown) =>
+      v === true || v === "t" || v === "true" || v === 1 || v === "1";
+    const flagCheck = await sql<{ test_bitcoin_payments: boolean }>`
+      select test_bitcoin_payments from store_settings where id = 1`;
+    const savedTestBitcoinPayments = asOnFlag(flagCheck[0]?.test_bitcoin_payments);
+    if (savedTestBitcoinPayments !== testBitcoinPayments) {
+      throw new Error(
+        "Test Bitcoin payments did not save. Check that migration 0012 applied (test_bitcoin_payments column).",
+      );
+    }
+
     return {
       ok: true as const,
       nexapayWebhookSecretConfigured,
       btcZpubConfigured,
+      testBitcoinPayments: savedTestBitcoinPayments,
     };
   });
 

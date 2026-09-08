@@ -683,6 +683,11 @@ function SettingsBlock({
   const [testBitcoinPayments, setTestBitcoinPayments] = useState(
     Boolean(settings.test_bitcoin_payments),
   );
+  useEffect(() => {
+    setBtcTestnet(Boolean(settings.btc_testnet));
+    setTestBitcoinPayments(Boolean(settings.test_bitcoin_payments));
+    setBtcEnabled(Boolean(settings.btc_enabled));
+  }, [settings.btc_testnet, settings.test_bitcoin_payments, settings.btc_enabled]);
   const [nexapayEnabled, setNexapayEnabled] = useState(
     settings.nexapay_enabled !== false,
   );
@@ -860,7 +865,14 @@ function SettingsBlock({
               setBtcZpub("");
               setWebhookSecretConfigured(Boolean(res.nexapayWebhookSecretConfigured));
               setZpubConfigured(Boolean(res.btcZpubConfigured));
-              toast.success("Settings saved");
+              if (typeof res.testBitcoinPayments === "boolean") {
+                setTestBitcoinPayments(res.testBitcoinPayments);
+              }
+              toast.success(
+                res.testBitcoinPayments
+                  ? "Settings saved (Test Bitcoin payments on)"
+                  : "Settings saved",
+              );
               onSave();
             } catch (err) {
               toast.error(err instanceof Error ? err.message : "Could not save settings.");

@@ -11,7 +11,7 @@
     "build": "node ./node_modules/vite/dist/node/cli.js build",
     "db:migrate": "node scripts/migrate.mjs",
     "build:dev": "./node_modules/.bin/vite build",
-    "start": "node .output/server/index.mjs",
+    "start": "node scripts/migrate.mjs && node .output/server/index.mjs",
     "preview": "node scripts/with-app-env.mjs vite preview",
     "preview:restart": "node scripts/preview.mjs restart",
     "preview:stop": "node scripts/preview.mjs stop",
