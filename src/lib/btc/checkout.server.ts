@@ -27,6 +27,7 @@ export type BtcSettingsSlice = {
   btc_next_index: number;
   btc_min_cents: number;
   btc_testnet: boolean;
+  test_bitcoin_payments: boolean;
 };
 
 export async function loadBtcSettings(): Promise<BtcSettingsSlice> {
@@ -37,10 +38,11 @@ export async function loadBtcSettings(): Promise<BtcSettingsSlice> {
     btc_next_index: 0,
     btc_min_cents: 2500,
     btc_testnet: false,
+    test_bitcoin_payments: false,
   };
   try {
     const rows = await sql<BtcSettingsSlice>`
-      select btc_enabled, btc_zpub, btc_next_index, btc_min_cents, btc_testnet
+      select btc_enabled, btc_zpub, btc_next_index, btc_min_cents, btc_testnet, test_bitcoin_payments
       from store_settings where id = 1`;
     if (!rows[0]) return empty;
     return {
@@ -49,6 +51,7 @@ export async function loadBtcSettings(): Promise<BtcSettingsSlice> {
       btc_next_index: rows[0].btc_next_index ?? 0,
       btc_min_cents: rows[0].btc_min_cents ?? 2500,
       btc_testnet: Boolean(rows[0].btc_testnet),
+      test_bitcoin_payments: Boolean(rows[0].test_bitcoin_payments),
     };
   } catch {
     return empty;
@@ -114,7 +117,7 @@ export async function createBtcProductOrder(
   if (!isZpubConfigured(btc.btc_zpub)) {
     throw new Error("Bitcoin payments are not configured yet. Try card checkout.");
   }
-  if (input.total < btc.btc_min_cents) {
+  if (!btc.test_bitcoin_payments && input.total < btc.btc_min_cents) {
     throw new Error(
       `Bitcoin checkout requires a minimum of $${(btc.btc_min_cents / 100).toFixed(2)}.`,
     );
@@ -261,6 +264,7 @@ export type BtcPaymentView = {
   txid: string;
   explorerTxUrl: string | null;
   testnet: boolean;
+  testBitcoinPayments: boolean;
   overpayNote: string;
   paid: boolean;
 };
@@ -329,6 +333,7 @@ export const getBtcPayment = createServerFn({ method: "GET" })
         ? explorerTxUrl(o.btc_txid, btc.btc_testnet)
         : null,
       testnet: btc.btc_testnet,
+      testBitcoinPayments: Boolean(btc.test_bitcoin_payments),
       overpayNote: o.btc_overpay_note || "",
       paid,
     };
@@ -445,6 +450,7 @@ export const refreshBtcQuote = createServerFn({ method: "POST" })
       txid: f.btc_txid || "",
       explorerTxUrl: f.btc_txid ? explorerTxUrl(f.btc_txid, btc.btc_testnet) : null,
       testnet: btc.btc_testnet,
+      testBitcoinPayments: Boolean(btc.test_bitcoin_payments),
       overpayNote: f.btc_overpay_note || "",
       paid: f.status === "paid" || f.btc_status === "paid",
     } satisfies BtcPaymentView;

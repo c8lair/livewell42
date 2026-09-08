@@ -202,7 +202,9 @@ function Shop({
 
   const merchandise = lines.reduce((s, l) => s + l.product.priceCents * l.qty, 0);
   const credit = Math.min(me.creditCents, merchandise);
-  const ship = shippingCents(merchandise, settings.freeShippingAtCents, settings.shippingCents);
+  const normalShip = shippingCents(merchandise, settings.freeShippingAtCents, settings.shippingCents);
+  const ship =
+    rail === "btc" && settings.testBitcoinPayments ? 0 : normalShip;
   const due = merchandise - credit + ship;
 
   function setQ(id: number, next: number, stock: number) {
@@ -332,7 +334,7 @@ function Shop({
                 Due {cents(due)}
               </p>
             </div>
-            <Button disabled={busy || merchandise === 0 || (!settings.nexapayEnabled && !(settings.btcEnabled && due >= (settings.btcMinCents ?? 2500)))} onClick={() => void checkout()}>
+            <Button disabled={busy || merchandise === 0 || (!settings.nexapayEnabled && !(settings.btcEnabled && (settings.testBitcoinPayments || due >= (settings.btcMinCents ?? 2500))))} onClick={() => void checkout()}>
               {busy ? "Placing…" : "Pay now"}
             </Button>
           </div>
@@ -545,8 +547,9 @@ function RailPicker({
 }) {
   const cardOn = Boolean(settings.nexapayEnabled);
   const min = settings.btcMinCents ?? 2500;
+  const testBtc = Boolean(settings.testBitcoinPayments);
   const btcOn =
-    Boolean(settings.btcEnabled) && dueCents >= min;
+    Boolean(settings.btcEnabled) && (testBtc || dueCents >= min);
 
   useEffect(() => {
     if (cardOn && (!btcOn || value !== "btc")) {
@@ -590,7 +593,7 @@ function RailPicker({
         >
           Pay with Bitcoin
         </button>
-      ) : settings.btcEnabled && dueCents > 0 && dueCents < min ? (
+      ) : settings.btcEnabled && !testBtc && dueCents > 0 && dueCents < min ? (
         <p className="text-xs text-faint">
           Bitcoin available for orders of {cents(min)} or more.
         </p>

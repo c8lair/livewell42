@@ -678,6 +678,9 @@ function SettingsBlock({
     ((settings.btc_min_cents ?? 2500) / 100).toFixed(2),
   );
   const [btcTestnet, setBtcTestnet] = useState(Boolean(settings.btc_testnet));
+  const [testBitcoinPayments, setTestBitcoinPayments] = useState(
+    Boolean(settings.test_bitcoin_payments),
+  );
   const [nexapayEnabled, setNexapayEnabled] = useState(
     settings.nexapay_enabled !== false,
   );
@@ -807,6 +810,21 @@ function SettingsBlock({
           Testnet
         </label>
       </div>
+      <label className="flex items-start gap-2 text-sm text-muted">
+        <input
+          type="checkbox"
+          className="mt-1"
+          checked={testBitcoinPayments}
+          onChange={(e) => setTestBitcoinPayments(e.target.checked)}
+        />
+        <span>
+          Test Bitcoin payments
+          <span className="mt-0.5 block text-xs text-faint">
+            Off by default. When on (and Bitcoin is enabled): ignore the USD minimum and force
+            $0 shipping so small carts can open a real payment page. Separate from Testnet.
+          </span>
+        </span>
+      </label>
       <div>
         <Label>Legacy BTC note address (optional display)</Label>
         <Input value={btc} onChange={(e) => setBtc(e.target.value)} />
@@ -833,6 +851,7 @@ function SettingsBlock({
                   btcZpub,
                   btcMinDollars: btcMin,
                   btcTestnet,
+                  testBitcoinPayments,
                 },
               });
               setNexapayWebhookSecret("");

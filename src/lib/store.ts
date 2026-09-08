@@ -32,6 +32,7 @@ export type PublicSettings = {
   /** Minimum order total (cents) for Bitcoin checkout. Never exposes zpub. */
   btcMinCents: number;
   btcTestnet: boolean;
+  testBitcoinPayments: boolean;
 };
 
 export type Me = {
@@ -73,6 +74,7 @@ type SettingsRow = {
   btc_next_index: number;
   btc_min_cents: number;
   btc_testnet: boolean;
+  test_bitcoin_payments: boolean;
 };
 
 function mapProduct(r: ProductRow): Product {
@@ -170,12 +172,13 @@ async function loadSettings(): Promise<SettingsRow> {
     btc_next_index: 0,
     btc_min_cents: 2500,
     btc_testnet: false,
+    test_bitcoin_payments: false,
   };
 
   type Row = SettingsRow;
   let r: Row | undefined;
   try {
-    const rows = await sql<Row>`select store_name, support_email, owner_email, shipping_cents, free_shipping_at_cents, nexapay_api_key, nexapay_webhook_secret, usdc_wallet, btc_wallet, banner_enabled, banner_text, btc_enabled, nexapay_enabled, btc_zpub, btc_next_index, btc_min_cents, btc_testnet from store_settings where id = 1`;
+    const rows = await sql<Row>`select store_name, support_email, owner_email, shipping_cents, free_shipping_at_cents, nexapay_api_key, nexapay_webhook_secret, usdc_wallet, btc_wallet, banner_enabled, banner_text, btc_enabled, nexapay_enabled, btc_zpub, btc_next_index, btc_min_cents, btc_testnet, test_bitcoin_payments from store_settings where id = 1`;
     r = rows[0];
   } catch {
     // Column may be missing before migration 0010 applies — keep Admin/shop up.
@@ -202,6 +205,7 @@ async function loadSettings(): Promise<SettingsRow> {
             btc_next_index: 0,
             btc_min_cents: 2500,
             btc_testnet: false,
+            test_bitcoin_payments: false,
           }
         : undefined;
     } catch {
@@ -226,6 +230,7 @@ async function loadSettings(): Promise<SettingsRow> {
   r.btc_next_index = r.btc_next_index ?? 0;
   r.btc_min_cents = r.btc_min_cents ?? 2500;
   r.btc_testnet = Boolean(r.btc_testnet);
+  r.test_bitcoin_payments = Boolean(r.test_bitcoin_payments);
   return r;
 }
 
@@ -246,6 +251,7 @@ function publicize(s: SettingsRow): PublicSettings {
     btcEnabled: Boolean(s.btc_enabled) && Boolean(s.btc_zpub?.trim()),
     btcMinCents: s.btc_min_cents ?? 2500,
     btcTestnet: Boolean(s.btc_testnet),
+    testBitcoinPayments: Boolean(s.test_bitcoin_payments),
   };
 }
 
@@ -684,12 +690,16 @@ export const placeOrder = createServerFn({ method: "POST" })
     }
 
     const credit = Math.min(me.creditCents, merchandise);
-    const ship = shippingCents(
+    let ship = shippingCents(
       merchandise,
       settings.free_shipping_at_cents,
       settings.shipping_cents,
     );
-    const total = merchandise - credit + ship;
+    let total = merchandise - credit + ship;
+    if (data.rail === "btc" && settings.test_bitcoin_payments) {
+      ship = 0;
+      total = Math.max(0, merchandise - credit);
+    }
     const seq = await sql<{ c: number }>`select count(*)::int as c from orders`;
     const orderNumber = `LW42-${String(1001 + (seq[0]?.c ?? 0))}`;
 
@@ -962,6 +972,7 @@ export const adminSaveSettings = createServerFn({ method: "POST" })
       btcZpub: z.string().max(200).default(""),
       btcMinDollars: z.string().trim().default("25"),
       btcTestnet: z.boolean().default(false),
+      testBitcoinPayments: z.boolean().default(false),
     }),
   )
   .middleware([authMiddleware])
@@ -990,6 +1001,9 @@ export const adminSaveSettings = createServerFn({ method: "POST" })
     await sql.query(
       "alter table store_settings add column if not exists btc_testnet boolean not null default false",
     );
+    await sql.query(
+      "alter table store_settings add column if not exists test_bitcoin_payments boolean not null default false",
+    );
 
     await sql`update store_settings set
       store_name = ${data.storeName},
@@ -1005,7 +1019,8 @@ export const adminSaveSettings = createServerFn({ method: "POST" })
       btc_enabled = ${data.btcEnabled},
       nexapay_enabled = ${data.nexapayEnabled},
       btc_min_cents = ${btcMin},
-      btc_testnet = ${data.btcTestnet}
+      btc_testnet = ${data.btcTestnet},
+      test_bitcoin_payments = ${data.testBitcoinPayments}
       where id = 1`;
 
     const webhookSecret = String(data.nexapayWebhookSecret ?? "").trim();

@@ -158,6 +158,11 @@ function BtcPayPage() {
   return (
     <main className="mx-auto max-w-lg px-5 pb-20 pt-10">
       <p className="text-xs tracking-wide text-faint uppercase">Livewell42</p>
+      {view.testBitcoinPayments ? (
+        <p className="mt-2 inline-block rounded-md border border-border bg-raised px-2 py-0.5 text-xs text-muted">
+          Test mode
+        </p>
+      ) : null}
       <h1 className="mt-2 font-display text-3xl">Pay with Bitcoin</h1>
       <p className="mt-2 text-sm text-muted">
         Order {view.orderNumber}
