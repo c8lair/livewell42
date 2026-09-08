@@ -17,6 +17,7 @@ import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as CheckoutSuccessRouteImport } from './routes/checkout/success'
 import { Route as OrdersIndexRouteImport } from './routes/orders/index'
+import { Route as OrdersOrderNumberRouteImport } from './routes/orders/$orderNumber'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiBtcWatchRouteImport } from './routes/api/btc/watch'
 import { Route as ApiNexapayWebhookRouteImport } from './routes/api/nexapay/webhook'
@@ -62,6 +63,11 @@ const OrdersIndexRoute = OrdersIndexRouteImport.update({
   path: '/orders/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OrdersOrderNumberRoute = OrdersOrderNumberRouteImport.update({
+  id: '/orders/$orderNumber',
+  path: '/orders/$orderNumber',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -91,6 +97,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/checkout/success': typeof CheckoutSuccessRoute
+  '/orders/$orderNumber': typeof OrdersOrderNumberRoute
   '/orders/': typeof OrdersIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/btc/watch': typeof ApiBtcWatchRoute
@@ -105,6 +112,7 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/checkout/success': typeof CheckoutSuccessRoute
+  '/orders/$orderNumber': typeof OrdersOrderNumberRoute
   '/orders': typeof OrdersIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/btc/watch': typeof ApiBtcWatchRoute
@@ -120,6 +128,7 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/checkout/success': typeof CheckoutSuccessRoute
+  '/orders/$orderNumber': typeof OrdersOrderNumberRoute
   '/orders/': typeof OrdersIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/btc/watch': typeof ApiBtcWatchRoute
@@ -136,6 +145,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/signup'
     | '/checkout/success'
+    | '/orders/$orderNumber'
     | '/orders/'
     | '/api/auth/$'
     | '/api/btc/watch'
@@ -150,6 +160,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/signup'
     | '/checkout/success'
+    | '/orders/$orderNumber'
     | '/orders'
     | '/api/auth/$'
     | '/api/btc/watch'
@@ -164,6 +175,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/signup'
     | '/checkout/success'
+    | '/orders/$orderNumber'
     | '/orders/'
     | '/api/auth/$'
     | '/api/btc/watch'
@@ -179,6 +191,7 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   SignupRoute: typeof SignupRoute
   CheckoutSuccessRoute: typeof CheckoutSuccessRoute
+  OrdersOrderNumberRoute: typeof OrdersOrderNumberRoute
   OrdersIndexRoute: typeof OrdersIndexRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiBtcWatchRoute: typeof ApiBtcWatchRoute
@@ -244,6 +257,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrdersIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/orders/$orderNumber': {
+      id: '/orders/$orderNumber'
+      path: '/orders/$orderNumber'
+      fullPath: '/orders/$orderNumber'
+      preLoaderRoute: typeof OrdersOrderNumberRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -283,6 +303,7 @@ const rootRouteChildren: RootRouteChildren = {
   ResetPasswordRoute: ResetPasswordRoute,
   SignupRoute: SignupRoute,
   CheckoutSuccessRoute: CheckoutSuccessRoute,
+  OrdersOrderNumberRoute: OrdersOrderNumberRoute,
   OrdersIndexRoute: OrdersIndexRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiBtcWatchRoute: ApiBtcWatchRoute,
