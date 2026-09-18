@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Livewell42 — Admin Settings Mockup</title>
+  <style>
+    :root {
+      --bg: #0f1115;
+      --surface: #171a21;
+      --raised: #1e222b;
+      --border: #2a303c;
+      --fg: #e8eaed;
+      --muted: #9aa3b2;
+      --faint: #6b7280;
+      --accent: #5b9fd4;
+      --accent-dim: #3d7aa8;
+      --success: #3d9a6a;
+      --danger: #c45c5c;
+      --radius: 12px;
+      --font: "Inter", system-ui, -apple-system, sans-serif;
+      --display: "Georgia", "Times New Roman", serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--fg);
+      line-height: 1.45;
+      min-height: 100dvh;
+    }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 24px 20px 80px; }
+    header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; }
+    header a { color: var(--muted); font-size: 13px; text-decoration: none; }
+    h1 { font-family: var(--display); font-size: 28px; font-weight: 500; margin: 4px 0 0; }
+    .badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase;
+      padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .badge.on { border-color: var(--success); color: #8fd4b0; background: rgba(61,154,106,0.12); }
+    .badge.off { border-color: var(--border); color: var(--faint); }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    .card h2 {
+      font-family: var(--display);
+      font-size: 18px;
+      font-weight: 500;
+      margin: 0 0 4px;
+    }
+    .card .sub { font-size: 13px; color: var(--muted); margin-bottom: 16px; }
+    .row { display: grid; gap: 12px; margin-bottom: 14px; }
+    @media (min-width: 560px) {
+      .row.cols-2 { grid-template-columns: 1fr 1fr; }
+      .row.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+    }
+    label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+    input[type="text"], input[type="number"], input[type="email"], select, textarea {
+      width: 100%;
+      background: var(--raised);
+      border: 1px solid var(--border);
+      color: var(--fg);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 14px;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    .toggle-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 0; border-bottom: 1px solid var(--border);
+    }
+    .toggle-row:last-child { border-bottom: none; }
+    .toggle-label { font-size: 14px; }
+    .toggle-desc { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .switch {
+      width: 42px; height: 24px; border-radius: 999px;
+      background: var(--border); position: relative; cursor: pointer;
+      flex-shrink: 0;
+    }
+    .switch.on { background: var(--accent-dim); }
+    .switch::after {
+      content: ""; position: absolute; top: 3px; left: 3px;
+      width: 18px; height: 18px; border-radius: 50%; background: #fff;
+      transition: transform 0.15s;
+    }
+    .switch.on::after { transform: translateX(18px); }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      background: var(--accent); color: #0b1220; border: none;
+      border-radius: 8px; padding: 10px 18px; font-size: 14px; font-weight: 600;
+      cursor: pointer;
+    }
+    .btn.outline {
+      background: transparent; color: var(--fg); border: 1px solid var(--border);
+    }
+    .btn:hover { filter: brightness(1.08); }
+    .actions { display: flex; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+    .disclosure {
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 12px;
+      background: var(--raised);
+    }
+    .disclosure summary {
+      cursor: pointer; font-size: 13px; color: var(--accent); list-style: none;
+    }
+    .disclosure summary::-webkit-details-marker { display: none; }
+    .note {
+      font-size: 12px; color: var(--faint); margin-top: 10px;
+      padding: 8px 10px; background: rgba(196,92,92,0.08);
+      border-left: 3px solid var(--danger); border-radius: 0 6px 6px 0;
+    }
+    .mock-banner {
+      background: linear-gradient(90deg, #1a2a3a, #1e2430);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 20px;
+    }
+    .mock-banner strong { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="mock-banner">
+      <strong>MOCKUP ONLY</strong> — proposed redesign of Admin → Settings. No production code changed. Review and approve before any implementation.
+    </div>
+
+    <header>
+      <div>
+        <a href="#">← Shop</a>
+        <h1>Back office</h1>
+      </div>
+      <span class="badge">Settings</span>
+    </header>
+
+    <section class="card">
+      <h2>Storefront</h2>
+      <p class="sub">Public name, support contact, and optional banner.</p>
+      <div class="row cols-2">
+        <div>
+          <label>Store name</label>
+          <input type="text" value="Livewell42" />
+        </div>
+        <div>
+          <label>Support email</label>
+          <input type="email" value="support@livewell42.com" />
+        </div>
+      </div>
+      <div class="toggle-row">
+        <div>
+          <div class="toggle-label">Show banner</div>
+          <div class="toggle-desc">Optional message at the top of the shop.</div>
+        </div>
+        <div class="switch on" title="On"></div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <div>
+          <label>Banner text</label>
+          <input type="text" value="Research-use products only. Membership required." />
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Shipping</h2>
+      <p class="sub">Flat rate and free-shipping threshold (lower 48 only).</p>
+      <div class="row cols-2">
+        <div>
+          <label>Shipping (USD)</label>
+          <input type="text" value="15.00" />
+        </div>
+        <div>
+          <label>Free shipping at (USD)</label>
+          <input type="text" value="250.00" />
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Card payments (NexaPay)</h2>
+      <p class="sub">Card checkout is live only when the toggle is on <em>and</em> an API key is saved.</p>
+      <div class="toggle-row">
+        <div>
+          <div class="toggle-label">Enable card checkout</div>
+          <div class="toggle-desc">Requires a valid NexaPay API key.</div>
+        </div>
+        <div class="switch on"></div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <div>
+          <label>API key</label>
+          <input type="text" value="••••••••••••••••" placeholder="Paste key to update" />
+        </div>
+      </div>
+      <div style="margin-top:8px">
+        <span class="badge on">Configured</span>
+        <span class="badge on" style="margin-left:6px">Enabled</span>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Bitcoin</h2>
+      <p class="sub">Mainnet only. zpub is never shown to customers. Testnet wiring has been recommended for removal.</p>
+      <div class="toggle-row">
+        <div>
+          <div class="toggle-label">Enable Bitcoin checkout</div>
+          <div class="toggle-desc">Requires a valid zpub. Mainnet addresses only.</div>
+        </div>
+        <div class="switch"></div>
+      </div>
+      <div class="row cols-2" style="margin-top:12px">
+        <div>
+          <label>Minimum order (USD)</label>
+          <input type="text" value="25.00" />
+        </div>
+        <div style="display:flex;align-items:flex-end">
+          <span class="badge off">Not configured</span>
+        </div>
+      </div>
+
+      <details class="disclosure">
+        <summary>Configure receiving wallet (zpub) →</summary>
+        <div class="row" style="margin-top:12px">
+          <div>
+            <label>zpub (BIP84 mainnet)</label>
+            <input type="text" placeholder="zpub…" />
+          </div>
+        </div>
+        <p class="note">
+          Do not paste a testnet xpub/zpub. The next change set will remove all testnet and test_bitcoin_payments flags from the codebase. Mainnet payment rails in <code>src/lib/btc/*</code> stay untouched.
+        </p>
+      </details>
+    </section>
+
+    <div class="actions">
+      <button class="btn">Save settings</button>
+      <button class="btn outline">Cancel</button>
+    </div>
+  </div>
+</body>
+</html>
