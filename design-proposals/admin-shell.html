@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Livewell42 — Admin Shell Mockup</title>
+  <style>
+    :root {
+      --bg: #0f1115;
+      --surface: #171a21;
+      --raised: #1e222b;
+      --border: #2a303c;
+      --fg: #e8eaed;
+      --muted: #9aa3b2;
+      --faint: #6b7280;
+      --accent: #5b9fd4;
+      --radius: 12px;
+      --font: system-ui, -apple-system, sans-serif;
+      --display: Georgia, serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: var(--font); background: var(--bg); color: var(--fg); min-height: 100dvh; }
+    .layout { display: grid; grid-template-columns: 220px 1fr; min-height: 100dvh; }
+    @media (max-width: 720px) {
+      .layout { grid-template-columns: 1fr; }
+      nav { border-right: none !important; border-bottom: 1px solid var(--border); }
+    }
+    nav {
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 20px 14px;
+    }
+    nav .brand { font-family: var(--display); font-size: 18px; margin-bottom: 4px; }
+    nav .sub { font-size: 11px; color: var(--muted); margin-bottom: 20px; }
+    nav a {
+      display: block;
+      padding: 10px 12px;
+      border-radius: 8px;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+    nav a:hover { background: var(--raised); color: var(--fg); }
+    nav a.active { background: rgba(91,159,212,0.15); color: var(--accent); font-weight: 600; }
+    main { padding: 24px 28px 60px; }
+    .mock-banner {
+      background: #1a2a3a;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 20px;
+    }
+    .mock-banner strong { color: var(--accent); }
+    h1 { font-family: var(--display); font-size: 26px; font-weight: 500; margin: 0 0 8px; }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+      margin: 20px 0 28px;
+    }
+    .stat {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+    }
+    .stat .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); }
+    .stat .value { font-family: var(--display); font-size: 24px; margin-top: 4px; }
+    .placeholder {
+      background: var(--surface);
+      border: 1px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 40px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <nav>
+      <div class="brand">Livewell42</div>
+      <div class="sub">Back office</div>
+      <a href="#" class="active">Overview</a>
+      <a href="#">Products</a>
+      <a href="#">Orders</a>
+      <a href="#">Bitcoin</a>
+      <a href="#">Settings</a>
+      <a href="#">Mail queue</a>
+      <a href="#" style="margin-top:24px;font-size:12px">← Shop</a>
+    </nav>
+    <main>
+      <div class="mock-banner">
+        <strong>MOCKUP ONLY</strong> — proposed admin shell with sidebar navigation. Replaces the single long scrolling page. Approve before implementation.
+      </div>
+      <h1>Overview</h1>
+      <p style="color:var(--muted);font-size:14px;margin:0">This year · operator desk</p>
+      <div class="stats">
+        <div class="stat">
+          <div class="label">YTD sales</div>
+          <div class="value">$12,480</div>
+        </div>
+        <div class="stat">
+          <div class="label">Orders</div>
+          <div class="value">47</div>
+        </div>
+        <div class="stat">
+          <div class="label">Month</div>
+          <div class="value">$1,920</div>
+        </div>
+      </div>
+      <div class="placeholder">
+        Content area for the selected section (Products, Orders, Bitcoin, Settings…).<br />
+        Each block from the current admin.tsx would live here as its own component.
+      </div>
+    </main>
+  </div>
+</body>
+</html>
