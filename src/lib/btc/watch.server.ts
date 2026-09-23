@@ -43,18 +43,8 @@ type OpenOrder = {
   btc_received: string;
   btc_status: string | null;
   btc_overpay_note: string;
+  payment_ref: string;
 };
-
-async function loadTestnet(): Promise<boolean> {
-  const sql = await getSql();
-  try {
-    const rows = await sql<{ btc_testnet: boolean }>`
-      select btc_testnet from store_settings where id = 1`;
-    return Boolean(rows[0]?.btc_testnet);
-  } catch {
-    return false;
-  }
-}
 
 async function loadOwnerEmail(): Promise<string> {
   const sql = await getSql();
@@ -77,7 +67,7 @@ export async function finalizeBtcOrderPaid(
       shipping_cents, total_cents, usd_total_cents, ship_name, ship_street,
       ship_city, ship_state, ship_zip, btc_amount, btc_rate, btc_rate_source,
       quote_expires_at, btc_address, btc_txid, btc_received, btc_status,
-      btc_overpay_note
+      btc_overpay_note, coalesce(payment_ref, '') as payment_ref
     from orders where id = ${orderId}`;
   const order = orders[0];
   if (!order || order.status !== "pending") return false;
@@ -93,6 +83,22 @@ export async function finalizeBtcOrderPaid(
     returning id`;
   if (!updated[0]) return false;
 
+  if (order.payment_ref === "membership") {
+    await sql`update profiles set membership_paid_at = now(), credit_cents = 500
+      where user_id = ${order.user_id} and membership_paid_at is null`;
+    const profiles = await sql<{ email: string }>`
+      select email from profiles where user_id = ${order.user_id}`;
+    const email = profiles[0]?.email ?? "";
+    const owner = await loadOwnerEmail();
+    await queueMail(
+      "membership",
+      owner || email,
+      "New Livewell42 membership",
+      `Member ${email || order.user_id} paid $5 via Bitcoin (txid ${opts.txid}). Credit of $5 will apply to their first order.`,
+    );
+    return true;
+  }
+
   const items = await sql<{
     product_id: number | null;
     name: string;
@@ -103,7 +109,18 @@ export async function finalizeBtcOrderPaid(
 
   for (const item of items) {
     if (item.product_id != null) {
-      await sql`update products set stock = stock - ${item.qty} where id = ${item.product_id}`;
+      const reserved = await sql<{ id: number }>`
+        update products set stock = stock - ${item.qty}
+        where id = ${item.product_id} and stock >= ${item.qty}
+        returning id`;
+      if (!reserved[0]) {
+        await queueMail(
+          "stock-short",
+          await loadOwnerEmail(),
+          `Stock short on ${order.order_number}`,
+          `Paid order ${order.order_number} needed ${item.qty} of product ${item.product_id} (${item.name}) but stock was insufficient. Fulfill manually.`,
+        );
+      }
     }
   }
 
@@ -189,13 +206,12 @@ export async function processOneBtcOrder(
   orderId: number,
 ): Promise<{ ok: true; btcStatus: string } | { ok: false; reason: string }> {
   const sql = await getSql();
-  const testnet = await loadTestnet();
   const rows = await sql<OpenOrder>`
     select id, user_id, order_number, status, merchandise_cents, credit_cents,
       shipping_cents, total_cents, usd_total_cents, ship_name, ship_street,
       ship_city, ship_state, ship_zip, btc_amount, btc_rate, btc_rate_source,
       quote_expires_at, btc_address, btc_txid, btc_received, btc_status,
-      btc_overpay_note
+      btc_overpay_note, coalesce(payment_ref, '') as payment_ref
     from orders where id = ${orderId} and deleted_at is null`;
   const order = rows[0];
   if (!order) return { ok: false, reason: "Order not found." };
@@ -221,8 +237,8 @@ export async function processOneBtcOrder(
   let txs;
   let summary;
   try {
-    txs = await listAddressTxs(order.btc_address, testnet);
-    summary = await addressSummary(order.btc_address, testnet);
+    txs = await listAddressTxs(order.btc_address);
+    summary = await addressSummary(order.btc_address);
   } catch (err) {
     return {
       ok: false,
@@ -373,7 +389,6 @@ export async function processOpenBtcOrders(): Promise<{
 
 async function scanUnmatchedOnProfiles() {
   const sql = await getSql();
-  const testnet = await loadTestnet();
   const profiles = await sql<{
     user_id: string;
     btc_address: string;
@@ -392,7 +407,7 @@ async function scanUnmatchedOnProfiles() {
 
     let txs;
     try {
-      txs = await listAddressTxs(p.btc_address, testnet);
+      txs = await listAddressTxs(p.btc_address);
     } catch {
       continue;
     }

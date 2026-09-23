@@ -1,13 +1,10 @@
 /**
- * Address / tx lookups via mempool.space (mainnet + testnet).
+ * Address / tx lookups via mempool.space (mainnet only).
  */
 import { btcToSats, satsToBtc } from "./rates.server";
 
-function baseUrl(testnet: boolean): string {
-  return testnet
-    ? "https://mempool.space/testnet/api"
-    : "https://mempool.space/api";
-}
+const MEMPOOL_API = "https://mempool.space/api";
+const MEMPOOL_EXPLORER = "https://mempool.space";
 
 export type AddressSummary = {
   address: string;
@@ -29,11 +26,8 @@ type Stats = {
   tx_count?: number;
 };
 
-export async function addressSummary(
-  address: string,
-  testnet = false,
-): Promise<AddressSummary> {
-  const res = await fetch(`${baseUrl(testnet)}/address/${encodeURIComponent(address)}`, {
+export async function addressSummary(address: string): Promise<AddressSummary> {
+  const res = await fetch(`${MEMPOOL_API}/address/${encodeURIComponent(address)}`, {
     headers: { Accept: "application/json" },
     signal: AbortSignal.timeout(12_000),
   });
@@ -75,12 +69,9 @@ type MempoolTx = {
   vout?: Array<{ scriptpubkey_address?: string; value?: number }>;
 };
 
-export async function listAddressTxs(
-  address: string,
-  testnet = false,
-): Promise<AddressTx[]> {
+export async function listAddressTxs(address: string): Promise<AddressTx[]> {
   const res = await fetch(
-    `${baseUrl(testnet)}/address/${encodeURIComponent(address)}/txs`,
+    `${MEMPOOL_API}/address/${encodeURIComponent(address)}/txs`,
     {
       headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(12_000),
@@ -90,7 +81,7 @@ export async function listAddressTxs(
   const txs = (await res.json()) as MempoolTx[];
   let tipHeight = 0;
   try {
-    const tipRes = await fetch(`${baseUrl(testnet)}/blocks/tip/height`, {
+    const tipRes = await fetch(`${MEMPOOL_API}/blocks/tip/height`, {
       signal: AbortSignal.timeout(8_000),
     });
     if (tipRes.ok) tipHeight = Number(await tipRes.text()) || 0;
@@ -118,16 +109,12 @@ export async function listAddressTxs(
   });
 }
 
-export function explorerTxUrl(txid: string, testnet: boolean): string {
-  return testnet
-    ? `https://mempool.space/testnet/tx/${txid}`
-    : `https://mempool.space/tx/${txid}`;
+export function explorerTxUrl(txid: string): string {
+  return `${MEMPOOL_EXPLORER}/tx/${txid}`;
 }
 
-export function explorerAddressUrl(address: string, testnet: boolean): string {
-  return testnet
-    ? `https://mempool.space/testnet/address/${address}`
-    : `https://mempool.space/address/${address}`;
+export function explorerAddressUrl(address: string): string {
+  return `${MEMPOOL_EXPLORER}/address/${address}`;
 }
 
 /** Sum confirmed inbound to address across listed txs (ignores spends). */

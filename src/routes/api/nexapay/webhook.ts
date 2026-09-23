@@ -31,13 +31,11 @@ export const Route = createFileRoute("/api/nexapay/webhook")({
             request.headers.get("X-NexaPay-Timestamp") ??
             request.headers.get("x-nexapay-timestamp");
 
-          // Prefer DB secret; env is fallback only. Missing env alone is not a 500.
-          if (secret) {
-            if (!signature || !verifyWebhookSignature(rawBody, signature, timestamp, secret)) {
-              return json({ error: "invalid signature" }, 401);
-            }
-          } else if (signature) {
-            // Secret not configured but a signature was sent — reject without 500.
+          // Prefer DB secret. Unsigned payloads are rejected (success page still confirms).
+          if (!secret) {
+            return json({ error: "webhook secret not configured" }, 401);
+          }
+          if (!signature || !verifyWebhookSignature(rawBody, signature, timestamp, secret)) {
             return json({ error: "invalid signature" }, 401);
           }
 

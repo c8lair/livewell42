@@ -15,6 +15,7 @@ import { processBtcOrderByToken } from "./watch.server";
 import { explorerTxUrl } from "./mempool.server";
 import type { BtcPaymentView } from "./types";
 import { queueMail } from "@/lib/mail.server";
+import { assertAdmin } from "@/lib/auth/assert-admin.server";
 
 const SITE_ORIGIN = "https://livewell42.com";
 const QUOTE_MINUTES = 15;
@@ -24,8 +25,6 @@ export type BtcSettingsSlice = {
   btc_zpub: string;
   btc_next_index: number;
   btc_min_cents: number;
-  btc_testnet: boolean;
-  test_bitcoin_payments: boolean;
 };
 
 export async function loadBtcSettings(): Promise<BtcSettingsSlice> {
@@ -35,12 +34,10 @@ export async function loadBtcSettings(): Promise<BtcSettingsSlice> {
     btc_zpub: "",
     btc_next_index: 0,
     btc_min_cents: 2500,
-    btc_testnet: false,
-    test_bitcoin_payments: false,
   };
   try {
     const rows = await sql<BtcSettingsSlice>`
-      select btc_enabled, btc_zpub, btc_next_index, btc_min_cents, btc_testnet, test_bitcoin_payments
+      select btc_enabled, btc_zpub, btc_next_index, btc_min_cents
       from store_settings where id = 1`;
     if (!rows[0]) return empty;
     return {
@@ -48,8 +45,6 @@ export async function loadBtcSettings(): Promise<BtcSettingsSlice> {
       btc_zpub: rows[0].btc_zpub ?? "",
       btc_next_index: rows[0].btc_next_index ?? 0,
       btc_min_cents: rows[0].btc_min_cents ?? 2500,
-      btc_testnet: Boolean(rows[0].btc_testnet),
-      test_bitcoin_payments: Boolean(rows[0].test_bitcoin_payments),
     };
   } catch {
     return empty;
@@ -104,7 +99,7 @@ export async function createBtcProductOrder(
   if (!isZpubConfigured(btc.btc_zpub)) {
     throw new Error("Bitcoin payments are not configured yet. Try card checkout.");
   }
-  if (!btc.test_bitcoin_payments && input.total < btc.btc_min_cents) {
+  if (input.total < btc.btc_min_cents) {
     throw new Error(
       `Bitcoin checkout requires a minimum of $${(btc.btc_min_cents / 100).toFixed(2)}.`,
     );
@@ -140,18 +135,16 @@ export async function createBtcProductOrder(
   const locked = await sql<{
     btc_next_index: number;
     btc_zpub: string;
-    btc_testnet: boolean;
   }>`
     update store_settings
     set btc_next_index = btc_next_index + 1
     where id = 1
-    returning btc_next_index, btc_zpub, btc_testnet`;
+    returning btc_next_index, btc_zpub`;
   const nextAfter = locked[0]?.btc_next_index ?? 1;
   const derIndex = nextAfter - 1;
   const address = deriveAddress(
     locked[0]?.btc_zpub || btc.btc_zpub,
     derIndex,
-    Boolean(locked[0]?.btc_testnet ?? btc.btc_testnet),
   );
   await sql`
     update profiles
@@ -229,6 +222,109 @@ export async function createBtcProductOrder(
   };
 }
 
+/**
+ * $5 membership Bitcoin quote. Granted only after the watcher marks the
+ * quote paid (confirmed inbound). Does not skip the mainnet rail.
+ */
+export async function createBtcMembershipQuote(input: {
+  userId: string;
+  email: string;
+  ownerEmail: string;
+}): Promise<{ paymentUrl: string }> {
+  const sql = await getSql();
+  const btc = await loadBtcSettings();
+  if (!btc.btc_enabled) throw new Error("Bitcoin checkout is disabled.");
+  if (!isZpubConfigured(btc.btc_zpub)) {
+    throw new Error("Bitcoin payments are not configured yet. Try card checkout.");
+  }
+
+  const existing = await sql<{ payment_token: string }>`
+    select payment_token from orders
+    where user_id = ${input.userId}
+      and payment_rail = 'btc'
+      and payment_ref = 'membership'
+      and status = 'pending'
+      and deleted_at is null
+      and btc_status in ('waiting', 'seen', 'underpaid')
+      and payment_token is not null
+      and payment_token <> ''
+    order by id desc
+    limit 1`;
+  if (existing[0]?.payment_token) {
+    return { paymentUrl: `${SITE_ORIGIN}/pay/btc/${existing[0].payment_token}` };
+  }
+
+  const locked = await sql<{
+    btc_next_index: number;
+    btc_zpub: string;
+  }>`
+    update store_settings
+    set btc_next_index = btc_next_index + 1
+    where id = 1
+    returning btc_next_index, btc_zpub`;
+  const nextAfter = locked[0]?.btc_next_index ?? 1;
+  const derIndex = nextAfter - 1;
+  const address = deriveAddress(
+    locked[0]?.btc_zpub || btc.btc_zpub,
+    derIndex,
+  );
+  await sql`
+    update profiles
+    set btc_address = ${address}, btc_derivation_index = ${derIndex}
+    where user_id = ${input.userId}`;
+
+  const { rate, source } = await getBtcUsdRate();
+  const total = 500;
+  const btcAmount = usdCentsToBtc(total, rate);
+  const expires = new Date(Date.now() + QUOTE_MINUTES * 60_000);
+  const token = newPaymentToken();
+  const seq = await sql<{ c: number }>`select count(*)::int as c from orders`;
+  const orderNumber = `LW42-MEM-${String(1001 + (seq[0]?.c ?? 0))}`;
+
+  const inserted = await sql<{ id: number }>`
+    insert into orders (
+      user_id, order_number, merchandise_cents, credit_cents, shipping_cents, total_cents,
+      usd_total_cents, status, ship_name, ship_street, ship_city, ship_state, ship_zip,
+      payment_rail, payment_ref,
+      btc_amount, btc_rate, btc_rate_source, quote_expires_at,
+      btc_address, btc_derivation_index, btc_txid, btc_received, btc_status,
+      payment_token
+    ) values (
+      ${input.userId}, ${orderNumber}, ${total}, 0, 0, ${total}, ${total},
+      'pending', 'Membership', '', '', '', '',
+      'btc', 'membership',
+      ${btcAmount}, ${rate}, ${source}, ${expires.toISOString()},
+      ${address}, ${derIndex}, '', '0', 'waiting',
+      ${token}
+    ) returning id`;
+  void inserted;
+
+  const paymentUrl = `${SITE_ORIGIN}/pay/btc/${token}`;
+  const body = [
+    `Membership ${orderNumber}`,
+    `Pay exactly ${btcAmount} BTC (≈ $5.00) within ${QUOTE_MINUTES} minutes.`,
+    `Payment page: ${paymentUrl}`,
+    `Address: ${address}`,
+    `Rate: ${rate} USD/BTC (${source})`,
+    `Membership is granted after the payment confirms on mainnet.`,
+  ].join("\n");
+  if (input.email) {
+    await queueMail(
+      "btc-quote",
+      input.email,
+      "Livewell42 Bitcoin membership",
+      body,
+    );
+  }
+  await queueMail(
+    "btc-quote-owner",
+    input.ownerEmail || input.email,
+    `Livewell42 BTC membership ${orderNumber}`,
+    body,
+  );
+  return { paymentUrl };
+}
+
 function buildBip21(address: string, amount: string, label = "Livewell42"): string {
   const params = new URLSearchParams();
   params.set("amount", amount);
@@ -245,7 +341,6 @@ export async function loadBtcPaymentView(token: string): Promise<BtcPaymentView>
       /* ignore poll errors — still return quote */
     }
 
-    const btc = await loadBtcSettings();
     const rows = await sql<{
       order_number: string;
       status: string;
@@ -286,11 +381,7 @@ export async function loadBtcPaymentView(token: string): Promise<BtcPaymentView>
       bip21: buildBip21(o.btc_address, amountForQr),
       quoteExpiresAt: o.quote_expires_at,
       txid: o.btc_txid || "",
-      explorerTxUrl: o.btc_txid
-        ? explorerTxUrl(o.btc_txid, btc.btc_testnet)
-        : null,
-      testnet: btc.btc_testnet,
-      testBitcoinPayments: Boolean(btc.test_bitcoin_payments),
+      explorerTxUrl: o.btc_txid ? explorerTxUrl(o.btc_txid) : null,
       overpayNote: o.btc_overpay_note || "",
       paid,
     };
@@ -353,7 +444,6 @@ export async function refreshBtcPaymentQuote(token: string): Promise<BtcPaymentV
     } catch {
       /* ignore */
     }
-    const btc = await loadBtcSettings();
     const fresh = await sql<{
       order_number: string;
       status: string;
@@ -389,19 +479,14 @@ export async function refreshBtcPaymentQuote(token: string): Promise<BtcPaymentV
       bip21: buildBip21(f.btc_address, f.btc_amount),
       quoteExpiresAt: f.quote_expires_at,
       txid: f.btc_txid || "",
-      explorerTxUrl: f.btc_txid ? explorerTxUrl(f.btc_txid, btc.btc_testnet) : null,
-      testnet: btc.btc_testnet,
-      testBitcoinPayments: Boolean(btc.test_bitcoin_payments),
+      explorerTxUrl: f.btc_txid ? explorerTxUrl(f.btc_txid) : null,
       overpayNote: f.btc_overpay_note || "",
       paid: f.status === "paid" || f.btc_status === "paid",
     } satisfies BtcPaymentView;
 }
 
 async function requireAdminUser(userId: string) {
-  const sql = await getSql();
-  const rows = await sql<{ is_admin: boolean }>`
-    select is_admin from profiles where user_id = ${userId}`;
-  if (!rows[0]?.is_admin) throw new Error("Admin only.");
+  await assertAdmin(userId);
 }
 
 export async function cancelBtcQuote(userId: string, orderId: number) {
