@@ -1,6 +1,6 @@
 # Livewell42
 
-Private membership shop. $5 to join (credited on the first order). Research-use products only. Payments stay in demo mode until you add keys in Admin.
+Private membership shop. Research-use products only. Payments stay in demo mode until you add keys in Admin.
 
 This folder is a full copy of the site.
 

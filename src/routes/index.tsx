@@ -7,6 +7,7 @@ import {
   getBootstrap,
   payMembership,
   placeOrder,
+  MEMBERSHIP_FEE_REQUIRED,
   type Me,
   type Product,
   type PublicSettings,
@@ -37,7 +38,7 @@ function Gate() {
       <p className="font-display text-sm tracking-[0.28em] text-muted uppercase">Livewell42</p>
       <h1 className="mt-4 font-display text-5xl leading-none tracking-tight">Members</h1>
       <p className="mt-5 max-w-sm text-sm leading-relaxed text-muted">
-        Access is by referral. Membership is $5, once. That amount is credited on your first order.
+        Access is by referral. Create an account or sign in to continue.
       </p>
       <div className="mt-10 flex flex-col gap-3 sm:flex-row">
         <Link
@@ -122,7 +123,8 @@ function MemberApp() {
   }
 
   const inShop =
-    Boolean(me.legalAcceptedAt) && (me.member || me.isAdmin);
+    Boolean(me.legalAcceptedAt) &&
+    (me.member || me.isAdmin || !MEMBERSHIP_FEE_REQUIRED);
   const showBanner =
     inShop && settings.bannerEnabled && settings.bannerText.trim().length > 0;
 
@@ -151,7 +153,7 @@ function MemberApp() {
       </header>
       {!me.legalAcceptedAt ? (
         <LegalGate onAccepted={() => void refresh()} />
-      ) : me.member || me.isAdmin ? (
+      ) : me.member || me.isAdmin || !MEMBERSHIP_FEE_REQUIRED ? (
         <Shop me={me} settings={settings} products={products} onPaid={() => void refresh()} />
       ) : (
         <Paywall settings={settings} onPaid={() => void refresh()} />
@@ -210,6 +212,7 @@ function Paywall({
   settings: PublicSettings;
   onPaid: () => void;
 }) {
+  // Dormant: only mounted when MEMBERSHIP_FEE_REQUIRED is true.
   const cardOn = Boolean(settings.nexapayEnabled);
   const btcOn = Boolean(settings.btcEnabled);
   const [rail, setRail] = useState<Rail>(cardOn ? "card" : "btc");

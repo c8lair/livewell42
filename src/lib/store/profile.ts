@@ -34,12 +34,12 @@ export async function ensureProfile(
 
   const admins = await sql<{ c: number }>`select count(*)::int as c from profiles where is_admin = true`;
   const isAdmin = (admins[0]?.c ?? 0) === 0;
-  await sql`insert into profiles (user_id, email, is_admin) values (${userId}, ${mail}, ${isAdmin})`;
+  await sql`insert into profiles (user_id, email, is_admin, membership_paid_at) values (${userId}, ${mail}, ${isAdmin}, now())`;
   return {
     userId,
     email: mail,
     isAdmin,
-    member: false,
+    member: true,
     creditCents: 0,
     legalAcceptedAt: null,
   };

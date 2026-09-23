@@ -8,6 +8,7 @@ import { mapProduct, type Product, type ProductRow } from "./types";
 import { loadSettings, publicize } from "./settings";
 import { ensureProfile } from "./profile";
 import { nexaUrls, newClientRef } from "./helpers";
+import { MEMBERSHIP_FEE_REQUIRED } from "@/lib/membership-fee";
 
 export const getBootstrap = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
@@ -17,7 +18,10 @@ export const getBootstrap = createServerFn({ method: "POST" })
     const me = await ensureProfile(context.userId, session?.email ?? null);
     const settings = publicize(await loadSettings());
     let products: Product[] = [];
-    if ((me.member || me.isAdmin) && me.legalAcceptedAt) {
+    const catalogOk =
+      Boolean(me.legalAcceptedAt) &&
+      (me.member || me.isAdmin || !MEMBERSHIP_FEE_REQUIRED);
+    if (catalogOk) {
       const sql = await getSql();
       const rows = await sql<ProductRow>`select id, name, size_label, category, price_cents, stock, coa_url, active, sort_order from products where active = true order by lower(name), id`;
       products = rows.map(mapProduct);
@@ -71,6 +75,10 @@ export const payMembership = createServerFn({ method: "POST" })
     const me = await ensureProfile(context.userId, null);
     if (!me.legalAcceptedAt) throw new Error("Confirm the sign-in statements first.");
     if (me.member) return { ok: true, already: true };
+    // Dormant $5 fee: keep the NexaPay/BTC handlers below for a later flip.
+    if (!MEMBERSHIP_FEE_REQUIRED) {
+      return { ok: true, already: true };
+    }
     const sql = await getSql();
     const settings = await loadSettings();
 
@@ -177,7 +185,9 @@ export const placeOrder = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const me = await ensureProfile(context.userId, null);
     if (!me.legalAcceptedAt) throw new Error("Confirm the sign-in statements first.");
-    if (!me.member && !me.isAdmin) throw new Error("Membership required.");
+    if (MEMBERSHIP_FEE_REQUIRED && !me.member && !me.isAdmin) {
+      throw new Error("Membership required.");
+    }
     const sql = await getSql();
     const settings = await loadSettings();
 

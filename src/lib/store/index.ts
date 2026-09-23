@@ -1,3 +1,4 @@
+export { MEMBERSHIP_FEE_REQUIRED } from "@/lib/membership-fee";
 export type { Product, PublicSettings, Me } from "./types";
 export { asOn, getNexapayWebhookSecret } from "./settings";
 export { finalizePayment } from "./payments";
