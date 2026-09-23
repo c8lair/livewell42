@@ -27,7 +27,11 @@
  * NEVER import this from client code — it pulls in `pg` + the preview secret +
  * server-only Better Auth internals. The client uses `@/lib/auth/client`;
  * components read the user via `@/lib/auth/use-current-user`; server functions get
- * a verified id via `@/lib/auth/middleware`.
+ * a verified id via `@/lib/auth/middleware`. Admin-only store/BTC functions use
+ * `@/lib/auth/assert-admin.server` (or `requireAdmin` in `src/lib/store/profile.ts`).
+ *
+ * Ownership: this file is the Better Auth instance. Session resolution lives in
+ * `verify.server.ts`; identity gates in `gate-*.server.ts`.
  */
 import { betterAuth } from "better-auth";
 import { bearer, genericOAuth } from "better-auth/plugins";

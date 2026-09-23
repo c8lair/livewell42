@@ -13,8 +13,6 @@ export type BtcPaymentView = {
   quoteExpiresAt: string | null;
   txid: string;
   explorerTxUrl: string | null;
-  testnet: boolean;
-  testBitcoinPayments: boolean;
   overpayNote: string;
   paid: boolean;
 };

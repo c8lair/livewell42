@@ -5,7 +5,9 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import {
   acceptLegal,
   getBootstrap,
+  payMembership,
   placeOrder,
+  MEMBERSHIP_FEE_REQUIRED,
   type Me,
   type Product,
   type PublicSettings,
@@ -79,7 +81,7 @@ function MemberApp() {
     });
   }, []);
 
-  // Re-fetch settings when returning to the tab so Admin "Test Bitcoin payments" is live.
+  // Re-fetch when returning to the tab so Admin payment toggles stay live.
   useEffect(() => {
     function onVisible() {
       if (document.visibilityState !== "visible") return;
@@ -121,7 +123,8 @@ function MemberApp() {
   }
 
   const inShop =
-    Boolean(me.legalAcceptedAt) && (me.member || me.isAdmin);
+    Boolean(me.legalAcceptedAt) &&
+    (me.member || me.isAdmin || !MEMBERSHIP_FEE_REQUIRED);
   const showBanner =
     inShop && settings.bannerEnabled && settings.bannerText.trim().length > 0;
 
@@ -150,8 +153,10 @@ function MemberApp() {
       </header>
       {!me.legalAcceptedAt ? (
         <LegalGate onAccepted={() => void refresh()} />
-      ) : (
+      ) : me.member || me.isAdmin || !MEMBERSHIP_FEE_REQUIRED ? (
         <Shop me={me} settings={settings} products={products} onPaid={() => void refresh()} />
+      ) : (
+        <Paywall settings={settings} onPaid={() => void refresh()} />
       )}
     </div>
   );
@@ -200,6 +205,128 @@ function LegalGate({ onAccepted }: { onAccepted: () => void }) {
 }
 
 
+function Paywall({
+  settings,
+  onPaid,
+}: {
+  settings: PublicSettings;
+  onPaid: () => void;
+}) {
+  // Dormant: only mounted when MEMBERSHIP_FEE_REQUIRED is true.
+  const cardOn = Boolean(settings.nexapayEnabled);
+  const btcOn = Boolean(settings.btcEnabled);
+  const [rail, setRail] = useState<Rail>(cardOn ? "card" : "btc");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (rail === "card" && !cardOn && btcOn) setRail("btc");
+    if (rail === "btc" && !btcOn && cardOn) setRail("card");
+  }, [rail, cardOn, btcOn]);
+
+  async function pay() {
+    const selected: Rail =
+      cardOn && rail === "card" ? "card" : btcOn && rail === "btc" ? "btc" : cardOn ? "card" : "btc";
+    if (selected === "card" && !cardOn) {
+      toast.error("Card checkout is off");
+      return;
+    }
+    if (selected === "btc" && !btcOn) {
+      toast.error("Bitcoin checkout is not available.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await payMembership({ data: { rail: selected } });
+      if (res && "already" in res && res.already) {
+        toast.success("Membership already active.");
+        onPaid();
+        return;
+      }
+      if (res && "checkoutUrl" in res && res.checkoutUrl) {
+        try {
+          const id = "nexapayOrderId" in res ? String(res.nexapayOrderId ?? "") : "";
+          if (id) sessionStorage.setItem("lw42_np", id);
+        } catch {
+          /* ignore */
+        }
+        window.location.href = res.checkoutUrl;
+        return;
+      }
+      if (res && "paymentUrl" in res && res.paymentUrl) {
+        window.location.href = res.paymentUrl;
+        return;
+      }
+      toast.success("$5 membership paid. $5 credit waits on your first order.");
+      onPaid();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Payment failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const effectiveRail: Rail =
+    rail === "btc" && btcOn ? "btc" : cardOn ? "card" : btcOn ? "btc" : "card";
+
+  return (
+    <section className="mx-auto max-w-md px-5 py-8">
+      <h2 className="font-display text-3xl">Complete membership</h2>
+      <p className="mt-3 text-sm leading-relaxed text-muted">
+        One-time $5. Credited in full on your first order so it breaks even when you buy.
+        Membership is granted only after payment confirms.
+      </p>
+      <div className="mt-6 space-y-3">
+        <button
+          type="button"
+          disabled={!cardOn}
+          onClick={() => cardOn && setRail("card")}
+          className={`w-full rounded-md border px-3 py-3 text-left ${
+            !cardOn
+              ? "cursor-not-allowed border-border/60 opacity-50"
+              : effectiveRail === "card"
+                ? "border-accent bg-raised text-fg"
+                : "border-border text-muted hover:bg-raised/40"
+          }`}
+        >
+          <p className="text-sm font-medium text-fg">Card</p>
+          <p className="mt-1 text-xs leading-relaxed text-faint">
+            {cardOn ? "Visa, Mastercard, Apple Pay, Google Pay via NexaPay." : "Card checkout is off"}
+          </p>
+        </button>
+        {btcOn ? (
+          <button
+            type="button"
+            onClick={() => setRail("btc")}
+            className={`w-full rounded-md border px-3 py-3 text-left text-sm ${
+              effectiveRail === "btc"
+                ? "border-accent bg-raised text-fg"
+                : "border-border text-muted hover:bg-raised/40"
+            }`}
+          >
+            <span className="font-medium text-fg">Pay with Bitcoin</span>
+            {effectiveRail === "btc" ? (
+              <p className="mt-1 text-xs leading-relaxed text-faint">
+                You will get a 15-minute mainnet quote. Membership unlocks after 1 confirmation.
+              </p>
+            ) : null}
+          </button>
+        ) : null}
+      </div>
+      <Button
+        className="mt-6 w-full"
+        disabled={busy || (!cardOn && !btcOn)}
+        onClick={() => void pay()}
+      >
+        {busy
+          ? "Starting…"
+          : effectiveRail === "btc"
+            ? "Continue with Bitcoin"
+            : "Pay $5 membership"}
+      </Button>
+    </section>
+  );
+}
+
 function Shop({
   me,
   settings,
@@ -228,14 +355,12 @@ function Shop({
   const merchandise = lines.reduce((s, l) => s + l.product.priceCents * l.qty, 0);
   const credit = Math.min(me.creditCents, merchandise);
   const normalShip = shippingCents(merchandise, settings.freeShippingAtCents, settings.shippingCents);
-  // Test Bitcoin payments alone → $0 shipping (independent of Testnet / btcEnabled).
-  const ship = settings.testBitcoinPayments ? 0 : normalShip;
+  const ship = normalShip;
   const due = merchandise - credit + ship;
 
   const cardOn = Boolean(settings.nexapayEnabled);
   const btcMin = settings.btcMinCents ?? 2500;
-  const testBtc = Boolean(settings.testBitcoinPayments);
-  const btcOn = Boolean(settings.btcEnabled) && (testBtc || due >= btcMin);
+  const btcOn = Boolean(settings.btcEnabled) && due >= btcMin;
   const canPay = merchandise > 0 && (cardOn || btcOn);
 
   function setQ(id: number, next: number, stock: number) {
@@ -457,11 +582,10 @@ function Shop({
                     <p className="mt-1 text-xs leading-relaxed text-faint">
                       You will get a 15-minute Bitcoin quote with a QR code. Payment confirms
                       after 1 on-chain confirmation.
-                      {settings.btcTestnet ? " (Testnet mode is on.)" : ""}
                     </p>
                   ) : null}
                 </button>
-              ) : settings.btcEnabled && !testBtc && due > 0 && due < btcMin ? (
+              ) : settings.btcEnabled && due > 0 && due < btcMin ? (
                 <p className="text-xs text-faint">
                   Bitcoin available for orders of {cents(btcMin)} or more.
                 </p>
