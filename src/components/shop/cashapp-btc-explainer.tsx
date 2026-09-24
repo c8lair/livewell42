@@ -16,8 +16,10 @@ import {
   FAQ_PATH,
   type CashAppWalkthroughFrame,
 } from "@/lib/help/content";
-
-const FRAME_MS = 1600;
+import {
+  CASHAPP_WALKTHROUGH_FRAME_MS,
+  stepWalkthroughIndex,
+} from "@/lib/help/walkthrough";
 
 function useCoarsePointer() {
   const [coarse, setCoarse] = useState(false);
@@ -101,17 +103,31 @@ export function CashAppBtcExplainer({
       setFrameIdx(0);
       return;
     }
+    // Auto-advance is the looping "GIF". Reduced-motion users keep manual
+    // next/prev and dots so every step is still reachable.
     if (reduced) return;
     const timer = window.setInterval(() => {
-      setFrameIdx((i) => (i + 1) % CASHAPP_WALKTHROUGH.length);
-    }, FRAME_MS);
+      setFrameIdx((i) => stepWalkthroughIndex(i, 1, CASHAPP_WALKTHROUGH.length));
+    }, CASHAPP_WALKTHROUGH_FRAME_MS);
     return () => window.clearInterval(timer);
   }, [open, reduced]);
 
   useEffect(() => {
     if (!open) return;
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onOpenChange(false);
+      if (e.key === "Escape") {
+        onOpenChange(false);
+        return;
+      }
+      if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+        e.preventDefault();
+        setFrameIdx((i) => stepWalkthroughIndex(i, 1, CASHAPP_WALKTHROUGH.length));
+        return;
+      }
+      if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+        e.preventDefault();
+        setFrameIdx((i) => stepWalkthroughIndex(i, -1, CASHAPP_WALKTHROUGH.length));
+      }
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -168,28 +184,71 @@ export function CashAppBtcExplainer({
         <div
           className="relative mx-4 mt-4 max-h-[420px] overflow-hidden rounded-xl border border-border bg-[#0a0c10]"
           style={{ aspectRatio: "9 / 14" }}
-          aria-label="Looping Cash App Bitcoin walkthrough"
+          aria-label={
+            reduced
+              ? "Cash App Bitcoin walkthrough. Use next, previous, or the step dots."
+              : "Looping Cash App Bitcoin walkthrough"
+          }
         >
           <span className="absolute top-2 left-2 z-[2] rounded-full bg-black/65 px-2 py-0.5 text-[10px] tracking-[0.06em] text-accent uppercase">
-            Walkthrough · looping
+            {reduced ? "Walkthrough" : "Walkthrough · looping"}
           </span>
           <div className="flex h-full flex-col items-center justify-center px-5 py-6 text-center">
-            <div key={frame.id} className="lw-frame-in w-full">
+            <div
+              key={frame.id}
+              className={cn("w-full", !reduced && "lw-frame-in")}
+              aria-live="polite"
+            >
               <FrameIcon frame={frame} />
               <h4 className="text-base font-medium text-fg">{frame.title}</h4>
               <p className="mt-1.5 text-[13px] text-muted">{frame.body}</p>
             </div>
-            <div className="mt-4 flex justify-center gap-1.5" aria-hidden>
-              {CASHAPP_WALKTHROUGH.map((f, i) => (
-                <span
-                  key={f.id}
-                  className={cn(
-                    "size-1.5 rounded-full",
-                    i === frameIdx ? "bg-accent" : "bg-border",
-                  )}
-                />
-              ))}
+            <div className="mt-4 flex items-center justify-center gap-3">
+              <button
+                type="button"
+                className="rounded-md border border-border px-2 py-1 text-[11px] font-semibold tracking-wide text-muted uppercase hover:border-accent hover:text-fg"
+                aria-label="Previous step"
+                onClick={() =>
+                  setFrameIdx((i) =>
+                    stepWalkthroughIndex(i, -1, CASHAPP_WALKTHROUGH.length),
+                  )
+                }
+              >
+                Prev
+              </button>
+              <div className="flex justify-center gap-1.5">
+                {CASHAPP_WALKTHROUGH.map((f, i) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    aria-label={`Step ${i + 1}: ${f.title}`}
+                    aria-current={i === frameIdx ? "step" : undefined}
+                    className={cn(
+                      "size-2.5 rounded-full border border-transparent",
+                      i === frameIdx ? "bg-accent" : "bg-border hover:bg-muted",
+                    )}
+                    onClick={() => setFrameIdx(i)}
+                  />
+                ))}
+              </div>
+              <button
+                type="button"
+                className="rounded-md border border-border px-2 py-1 text-[11px] font-semibold tracking-wide text-muted uppercase hover:border-accent hover:text-fg"
+                aria-label="Next step"
+                onClick={() =>
+                  setFrameIdx((i) =>
+                    stepWalkthroughIndex(i, 1, CASHAPP_WALKTHROUGH.length),
+                  )
+                }
+              >
+                Next
+              </button>
             </div>
+            {reduced ? (
+              <p className="mt-2 text-[11px] text-faint">
+                Step {frameIdx + 1} of {CASHAPP_WALKTHROUGH.length}
+              </p>
+            ) : null}
           </div>
         </div>
 
