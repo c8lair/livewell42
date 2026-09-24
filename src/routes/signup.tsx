@@ -208,6 +208,10 @@ function Signup() {
         <Link to="/login" className="text-accent underline-offset-4 hover:underline">
           Sign in
         </Link>
+        {" · "}
+        <Link to="/faq" className="text-accent underline-offset-4 hover:underline">
+          Help
+        </Link>
       </p>
     </main>
   );

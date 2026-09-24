@@ -63,6 +63,9 @@ function OrderDetailPage() {
           </Link>
         </div>
         <div className="flex items-center gap-3 text-sm">
+          <Link to="/faq" className="text-muted hover:text-fg">
+            Help
+          </Link>
           <UserButton />
         </div>
       </header>
