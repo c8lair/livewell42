@@ -17,7 +17,7 @@ describe("shopper help content", () => {
     assert.ok(FAQ_ITEMS.some((item) => item.id === FAQ_FEES_ID));
   });
 
-  it("walks through Cash App buy in five looping frames", () => {
+  it("walks through Cash App buy in five steps", () => {
     assert.equal(CASHAPP_WALKTHROUGH.length, 5);
     assert.equal(CASHAPP_STEPS_LIST.length, 5);
     assert.equal(CASHAPP_WALKTHROUGH[0]?.icon, "cash");
