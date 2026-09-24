@@ -38,7 +38,7 @@ function screenOpen(): string {
     <p class="lw-ca-sub">Cash</p>
     <div class="lw-ca-tiles">
       <span class="lw-ca-tile">Pay</span>
-      <span class="lw-ca-tile lw-ca-tile--btc">₿</span>
+      <span class="lw-ca-tile lw-ca-tile--btc">BTC</span>
       <span class="lw-ca-tile">Card</span>
     </div>
     ${tabs("home")}
@@ -53,7 +53,7 @@ function screenBtc(): string {
     <p class="lw-ca-sub">Cash</p>
     <div class="lw-ca-tiles">
       <span class="lw-ca-tile">Pay</span>
-      ${hit("bitcoin-tile", "lw-ca-tile lw-ca-tile--btc", "₿<small>Bitcoin</small>")}
+      ${hit("bitcoin-tile", "lw-ca-tile lw-ca-tile--btc", "BTC")}
       <span class="lw-ca-tile">Card</span>
     </div>
     ${tabs("home")}
@@ -63,7 +63,7 @@ function screenBtc(): string {
 function screenBuy(): string {
   return `<div class="lw-ca-stage lw-ca-stage--asset">
     <p class="lw-ca-asset-kicker">Bitcoin</p>
-    <p class="lw-ca-asset-amt">₿</p>
+    <p class="lw-ca-asset-amt">BTC</p>
     <svg class="lw-ca-spark" viewBox="0 0 120 36" aria-hidden="true">
       <polyline fill="none" stroke="#00d632" stroke-width="2"
         points="2,28 20,22 38,24 56,14 74,16 92,8 118,12" />
