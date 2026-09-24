@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "driver.js/dist/driver.css";
 
 @theme {
   --color-bg: #0c0c0b;
@@ -44,21 +45,158 @@
   }
 }
 
-@keyframes lw-frame-in {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
+.driver-popover.lw-cashapp-driver {
+  background: var(--color-surface);
+  color: var(--color-fg);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  font-family: var(--font-sans);
+  max-width: 400px;
+  min-width: min(360px, calc(100vw - 2.5rem));
+  box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.65);
+  padding: 18px 16px 14px;
+  text-align: center;
 }
 
-@layer components {
-  .lw-frame-in {
-    animation: lw-frame-in 0.4s ease;
-  }
+.driver-popover.lw-cashapp-driver .driver-popover-footer {
+  text-align: initial;
+}
+
+.driver-popover.lw-cashapp-driver .driver-popover-title {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--color-fg);
+  padding-right: 28px;
+}
+
+.driver-popover.lw-cashapp-driver .driver-popover-description {
+  font-size: 13px;
+  color: var(--color-muted);
+}
+
+.driver-popover.lw-cashapp-driver .driver-popover-close-btn {
+  color: var(--color-muted);
+}
+
+.driver-popover.lw-cashapp-driver .driver-popover-close-btn:hover,
+.driver-popover.lw-cashapp-driver .driver-popover-close-btn:focus {
+  color: var(--color-fg);
+}
+
+.driver-popover.lw-cashapp-driver button.driver-popover-footer-btn {
+  background: transparent;
+  color: var(--color-muted);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 4px 8px;
+}
+
+.driver-popover.lw-cashapp-driver button.driver-popover-footer-btn:hover,
+.driver-popover.lw-cashapp-driver button.driver-popover-footer-btn:focus {
+  background: transparent;
+  border-color: var(--color-accent);
+  color: var(--color-fg);
+}
+
+.driver-popover.lw-cashapp-driver .driver-popover-progress-text {
+  color: var(--color-faint);
+}
+
+.driver-popover.lw-cashapp-driver .driver-popover-arrow {
+  display: none;
+}
+
+.lw-cashapp-driver__kicker {
+  margin: 0 0 4px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+}
+
+.lw-cashapp-driver__icon {
+  margin: 4px auto 12px;
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.lw-cashapp-driver__icon--buy,
+.lw-cashapp-driver__icon--amt {
+  font-size: 14px;
+}
+
+.lw-cashapp-driver__icon--cash {
+  background: #00d632;
+  color: #003b12;
+}
+
+.lw-cashapp-driver__icon--btc {
+  background: #f7931a;
+  color: #1a0f00;
+}
+
+.lw-cashapp-driver__icon--buy {
+  background: var(--color-accent);
+  color: var(--color-accent-fg);
+}
+
+.lw-cashapp-driver__icon--ok {
+  background: #3d9a6a;
+  color: #06140c;
+}
+
+.lw-cashapp-driver__icon--amt {
+  background: var(--color-raised);
+  color: var(--color-fg);
+  border: 2px solid var(--color-border);
+}
+
+.lw-cashapp-driver__fee {
+  margin-top: 12px;
+  border-radius: 8px;
+  border: 1px solid rgb(201 162 39 / 0.35);
+  background: rgb(201 162 39 / 0.1);
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #e8d48a;
+  text-align: left;
+}
+
+.lw-cashapp-driver__fee p {
+  margin: 0 0 6px;
+}
+
+.lw-cashapp-driver__fee a {
+  color: var(--color-accent);
+  text-underline-offset: 4px;
+}
+
+.lw-cashapp-driver__fee a:hover {
+  text-decoration: underline;
+}
+
+.lw-cashapp-driver__steps {
+  margin: 12px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--color-muted);
+  line-height: 1.45;
+  text-align: left;
+}
+
+.lw-cashapp-driver__steps li[data-current] {
+  color: var(--color-fg);
 }
 
 @media (prefers-reduced-motion: reduce) {

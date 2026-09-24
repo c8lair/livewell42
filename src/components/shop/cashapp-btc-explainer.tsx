@@ -1,24 +1,20 @@
-import {
-  useEffect,
-  useId,
-  useRef,
-  useState,
-  type MouseEvent,
-  type ReactNode,
-} from "react";
-import { createPortal } from "react-dom";
-import { Link } from "@tanstack/react-router";
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { driver, type Driver, type PopoverDOM } from "driver.js";
 import { cn } from "@/lib/cn";
 import {
   CASHAPP_STEPS_LIST,
   CASHAPP_WALKTHROUGH,
   FAQ_FEES_ID,
   FAQ_PATH,
-  type CashAppWalkthroughFrame,
 } from "@/lib/help/content";
 import {
-  CASHAPP_WALKTHROUGH_FRAME_MS,
-  stepWalkthroughIndex,
+  CASHAPP_DRIVER_POPOVER_CLASS,
+  CASHAPP_FEE_FAQ_LABEL,
+  CASHAPP_FEE_NOTE,
+  CASHAPP_TOUR_TITLE,
+  cashAppDriverSteps,
+  cashAppFeeFaqHref,
 } from "@/lib/help/walkthrough";
 
 function useCoarsePointer() {
@@ -33,40 +29,71 @@ function useCoarsePointer() {
   return coarse;
 }
 
-function usePrefersReducedMotion() {
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const apply = () => setReduced(mq.matches);
-    apply();
-    mq.addEventListener("change", apply);
-    return () => mq.removeEventListener("change", apply);
-  }, []);
-  return reduced;
+function prefersReducedMotion(): boolean {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-function FrameIcon({ frame }: { frame: CashAppWalkthroughFrame }) {
-  const tone =
-    frame.icon === "cash"
-      ? "bg-[#00d632] text-[#003b12]"
-      : frame.icon === "btc"
-        ? "bg-[#f7931a] text-[#1a0f00]"
-        : frame.icon === "buy"
-          ? "bg-accent text-accent-fg"
-          : frame.icon === "ok"
-            ? "bg-[#3d9a6a] text-[#06140c]"
-            : "border-2 border-border bg-raised text-fg";
-  return (
-    <div
-      className={cn(
-        "mx-auto mb-4 grid size-[72px] place-items-center rounded-full text-[28px] font-bold",
-        frame.icon === "buy" || frame.icon === "amt" ? "text-lg" : "",
-        tone,
-      )}
-    >
-      {frame.iconLabel}
-    </div>
-  );
+function decorateCashAppPopover(
+  popover: PopoverDOM,
+  index: number,
+  onFeeClick: (event: Event) => void,
+) {
+  const wrapper = popover.wrapper;
+  wrapper.setAttribute("aria-modal", "true");
+  popover.description.setAttribute("aria-live", "polite");
+
+  let kicker = wrapper.querySelector<HTMLElement>("[data-lw-cashapp-kicker]");
+  if (!kicker) {
+    kicker = document.createElement("p");
+    kicker.dataset.lwCashappKicker = "";
+    kicker.className = "lw-cashapp-driver__kicker";
+    kicker.textContent = CASHAPP_TOUR_TITLE;
+    popover.title.before(kicker);
+  }
+
+  const frame = CASHAPP_WALKTHROUGH[index];
+  let icon = wrapper.querySelector<HTMLElement>("[data-lw-cashapp-icon]");
+  if (!icon) {
+    icon = document.createElement("div");
+    icon.dataset.lwCashappIcon = "";
+    icon.setAttribute("aria-hidden", "true");
+    popover.title.before(icon);
+  }
+  icon.className = `lw-cashapp-driver__icon lw-cashapp-driver__icon--${frame?.icon ?? "cash"}`;
+  icon.textContent = frame?.iconLabel ?? "";
+
+  let fee = wrapper.querySelector<HTMLElement>("[data-lw-cashapp-fee]");
+  if (!fee) {
+    fee = document.createElement("div");
+    fee.dataset.lwCashappFee = "";
+    fee.className = "lw-cashapp-driver__fee";
+    const copy = document.createElement("p");
+    copy.textContent = CASHAPP_FEE_NOTE;
+    const link = document.createElement("a");
+    link.href = cashAppFeeFaqHref();
+    link.textContent = CASHAPP_FEE_FAQ_LABEL;
+    link.addEventListener("click", onFeeClick);
+    fee.append(copy, link);
+    popover.description.after(fee);
+  }
+
+  let recap = wrapper.querySelector<HTMLOListElement>("[data-lw-cashapp-steps]");
+  if (!recap) {
+    recap = document.createElement("ol");
+    recap.dataset.lwCashappSteps = "";
+    recap.className = "lw-cashapp-driver__steps";
+    recap.setAttribute("aria-label", "Cash App Bitcoin steps");
+    for (const step of CASHAPP_STEPS_LIST) {
+      const item = document.createElement("li");
+      item.textContent = step;
+      recap.append(item);
+    }
+    fee.after(recap);
+  }
+  recap.querySelectorAll("li").forEach((item, itemIndex) => {
+    if (itemIndex === index) item.setAttribute("data-current", "");
+    else item.removeAttribute("data-current");
+  });
 }
 
 export function CashAppBtcExplainer({
@@ -76,206 +103,65 @@ export function CashAppBtcExplainer({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const titleId = useId();
-  const closeRef = useRef<HTMLButtonElement>(null);
-  const restoreFocusRef = useRef<HTMLElement | null>(null);
-  const leaveTimer = useRef<number | null>(null);
-  const [frameIdx, setFrameIdx] = useState(0);
-  const reduced = usePrefersReducedMotion();
-  const coarse = useCoarsePointer();
+  const navigate = useNavigate();
+  const driverRef = useRef<Driver | null>(null);
 
   useEffect(() => {
     if (!open) return;
-    restoreFocusRef.current =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const t = window.setTimeout(() => closeRef.current?.focus(), 0);
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+
+    let ignoreDestroyed = false;
+    const instance = driver({
+      animate: !prefersReducedMotion(),
+      overlayColor: "#000000",
+      overlayOpacity: 0.7,
+      allowClose: true,
+      allowScroll: false,
+      allowKeyboardControl: true,
+      overlayClickBehavior: "close",
+      showProgress: true,
+      progressText: "{{current}} of {{total}}",
+      nextBtnText: "Next",
+      prevBtnText: "Prev",
+      doneBtnText: "Done",
+      popoverClass: CASHAPP_DRIVER_POPOVER_CLASS,
+      steps: cashAppDriverSteps(),
+      onPopoverRender: (popover, { index }) => {
+        decorateCashAppPopover(popover, index ?? 0, (event) => {
+          event.preventDefault();
+          instance.destroy();
+          void navigate({ to: FAQ_PATH, hash: FAQ_FEES_ID });
+        });
+      },
+      onDestroyed: () => {
+        if (driverRef.current === instance) driverRef.current = null;
+        if (!ignoreDestroyed) onOpenChange(false);
+      },
+    });
+
+    driverRef.current = instance;
+    instance.drive();
+
+    function onExtraKeys(event: KeyboardEvent) {
+      if (!instance.isActive()) return;
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        instance.moveNext();
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        instance.movePrevious();
+      }
+    }
+    window.addEventListener("keydown", onExtraKeys);
+
     return () => {
-      window.clearTimeout(t);
-      document.body.style.overflow = prevOverflow;
-      restoreFocusRef.current?.focus();
+      window.removeEventListener("keydown", onExtraKeys);
+      ignoreDestroyed = true;
+      if (driverRef.current === instance) driverRef.current = null;
+      if (instance.isActive()) instance.destroy();
     };
-  }, [open]);
+  }, [open, onOpenChange, navigate]);
 
-  useEffect(() => {
-    if (!open) {
-      setFrameIdx(0);
-      return;
-    }
-    // Auto-advance is the looping "GIF". Reduced-motion users keep manual
-    // next/prev and dots so every step is still reachable.
-    if (reduced) return;
-    const timer = window.setInterval(() => {
-      setFrameIdx((i) => stepWalkthroughIndex(i, 1, CASHAPP_WALKTHROUGH.length));
-    }, CASHAPP_WALKTHROUGH_FRAME_MS);
-    return () => window.clearInterval(timer);
-  }, [open, reduced]);
-
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        onOpenChange(false);
-        return;
-      }
-      if (e.key === "ArrowRight" || e.key === "ArrowDown") {
-        e.preventDefault();
-        setFrameIdx((i) => stepWalkthroughIndex(i, 1, CASHAPP_WALKTHROUGH.length));
-        return;
-      }
-      if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
-        e.preventDefault();
-        setFrameIdx((i) => stepWalkthroughIndex(i, -1, CASHAPP_WALKTHROUGH.length));
-      }
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onOpenChange]);
-
-  function clearLeave() {
-    if (leaveTimer.current != null) {
-      window.clearTimeout(leaveTimer.current);
-      leaveTimer.current = null;
-    }
-  }
-
-  function scheduleLeave() {
-    if (coarse) return;
-    clearLeave();
-    leaveTimer.current = window.setTimeout(() => onOpenChange(false), 280);
-  }
-
-  if (!open || typeof document === "undefined") return null;
-
-  const frame = CASHAPP_WALKTHROUGH[frameIdx] ?? CASHAPP_WALKTHROUGH[0];
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-5"
-      role="presentation"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onOpenChange(false);
-      }}
-      onMouseLeave={scheduleLeave}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        className="max-h-[90dvh] w-full max-w-[400px] overflow-auto rounded-[14px] border border-border bg-surface shadow-2xl"
-        onMouseEnter={clearLeave}
-      >
-        <header className="flex items-center justify-between border-b border-border px-4 py-3.5">
-          <h3 id={titleId} className="font-display text-[17px] font-medium">
-            Buy Bitcoin in Cash App
-          </h3>
-          <button
-            ref={closeRef}
-            type="button"
-            className="grid size-9 place-items-center text-2xl leading-none text-muted hover:text-fg"
-            aria-label="Close"
-            onClick={() => onOpenChange(false)}
-          >
-            ×
-          </button>
-        </header>
-
-        <div
-          className="relative mx-4 mt-4 max-h-[420px] overflow-hidden rounded-xl border border-border bg-[#0a0c10]"
-          style={{ aspectRatio: "9 / 14" }}
-          aria-label={
-            reduced
-              ? "Cash App Bitcoin walkthrough. Use next, previous, or the step dots."
-              : "Looping Cash App Bitcoin walkthrough"
-          }
-        >
-          <span className="absolute top-2 left-2 z-[2] rounded-full bg-black/65 px-2 py-0.5 text-[10px] tracking-[0.06em] text-accent uppercase">
-            {reduced ? "Walkthrough" : "Walkthrough · looping"}
-          </span>
-          <div className="flex h-full flex-col items-center justify-center px-5 py-6 text-center">
-            <div
-              key={frame.id}
-              className={cn("w-full", !reduced && "lw-frame-in")}
-              aria-live="polite"
-            >
-              <FrameIcon frame={frame} />
-              <h4 className="text-base font-medium text-fg">{frame.title}</h4>
-              <p className="mt-1.5 text-[13px] text-muted">{frame.body}</p>
-            </div>
-            <div className="mt-4 flex items-center justify-center gap-3">
-              <button
-                type="button"
-                className="rounded-md border border-border px-2 py-1 text-[11px] font-semibold tracking-wide text-muted uppercase hover:border-accent hover:text-fg"
-                aria-label="Previous step"
-                onClick={() =>
-                  setFrameIdx((i) =>
-                    stepWalkthroughIndex(i, -1, CASHAPP_WALKTHROUGH.length),
-                  )
-                }
-              >
-                Prev
-              </button>
-              <div className="flex justify-center gap-1.5">
-                {CASHAPP_WALKTHROUGH.map((f, i) => (
-                  <button
-                    key={f.id}
-                    type="button"
-                    aria-label={`Step ${i + 1}: ${f.title}`}
-                    aria-current={i === frameIdx ? "step" : undefined}
-                    className={cn(
-                      "size-2.5 rounded-full border border-transparent",
-                      i === frameIdx ? "bg-accent" : "bg-border hover:bg-muted",
-                    )}
-                    onClick={() => setFrameIdx(i)}
-                  />
-                ))}
-              </div>
-              <button
-                type="button"
-                className="rounded-md border border-border px-2 py-1 text-[11px] font-semibold tracking-wide text-muted uppercase hover:border-accent hover:text-fg"
-                aria-label="Next step"
-                onClick={() =>
-                  setFrameIdx((i) =>
-                    stepWalkthroughIndex(i, 1, CASHAPP_WALKTHROUGH.length),
-                  )
-                }
-              >
-                Next
-              </button>
-            </div>
-            {reduced ? (
-              <p className="mt-2 text-[11px] text-faint">
-                Step {frameIdx + 1} of {CASHAPP_WALKTHROUGH.length}
-              </p>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="px-4 pt-3 pb-4">
-          <div className="mb-3 rounded-lg border border-[#c9a227]/35 bg-[#c9a227]/10 px-3 py-2.5 text-xs leading-relaxed text-[#e8d48a]">
-            Cash App (and other) fees vary. Add a few extra dollars so you cover fees and
-            network costs.
-            <br />
-            <Link
-              to={FAQ_PATH}
-              hash={FAQ_FEES_ID}
-              className="text-accent underline-offset-4 hover:underline"
-              onClick={() => onOpenChange(false)}
-            >
-              Why add extra? See FAQ → fees
-            </Link>
-          </div>
-          <ol className="m-0 list-decimal space-y-1 pl-[18px] text-[13px] text-muted">
-            {CASHAPP_STEPS_LIST.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ol>
-        </div>
-      </div>
-    </div>,
-    document.body,
-  );
+  return null;
 }
 
 export function BtcCashAppHelp({ className }: { className?: string }) {

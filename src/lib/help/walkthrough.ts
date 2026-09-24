@@ -1,12 +1,43 @@
-/** Timing and index math for the Cash App Bitcoin overlay. */
+/**
+ * Driver.js mapping for the Cash App Bitcoin explainer.
+ *
+ * Steps are element-less (centered popovers) on purpose: this tour teaches
+ * Cash App, an external app. We do not spotlight Livewell42 shop DOM or invent
+ * a fake Cash App UI in the store.
+ */
 
-export const CASHAPP_WALKTHROUGH_FRAME_MS = 1600;
+import {
+  CASHAPP_WALKTHROUGH,
+  FAQ_FEES_ID,
+  FAQ_PATH,
+} from "./content.ts";
 
-export function stepWalkthroughIndex(
-  index: number,
-  delta: number,
-  length: number,
-): number {
-  if (length <= 0) return 0;
-  return ((index + delta) % length + length) % length;
+export const CASHAPP_DRIVER_POPOVER_CLASS = "lw-cashapp-driver";
+export const CASHAPP_TOUR_TITLE = "Buy Bitcoin in Cash App";
+
+export const CASHAPP_FEE_NOTE =
+  "Cash App (and other) fees vary. Add a few extra dollars so you cover fees and network costs.";
+
+export const CASHAPP_FEE_FAQ_LABEL = "Why add extra? See FAQ → fees";
+
+export function cashAppFeeFaqHref(): string {
+  return `${FAQ_PATH}#${FAQ_FEES_ID}`;
+}
+
+export type CashAppDriverStep = {
+  popover: {
+    title: string;
+    description: string;
+    popoverClass: string;
+  };
+};
+
+export function cashAppDriverSteps(): CashAppDriverStep[] {
+  return CASHAPP_WALKTHROUGH.map((frame) => ({
+    popover: {
+      title: frame.title,
+      description: frame.body,
+      popoverClass: CASHAPP_DRIVER_POPOVER_CLASS,
+    },
+  }));
 }

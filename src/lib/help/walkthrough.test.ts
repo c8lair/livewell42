@@ -1,39 +1,44 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { CASHAPP_WALKTHROUGH } from "./content.ts";
 import {
-  CASHAPP_WALKTHROUGH_FRAME_MS,
-  stepWalkthroughIndex,
+  CASHAPP_STEPS_LIST,
+  CASHAPP_WALKTHROUGH,
+  FAQ_FEES_ID,
+  FAQ_PATH,
+} from "./content.ts";
+import {
+  CASHAPP_DRIVER_POPOVER_CLASS,
+  CASHAPP_FEE_FAQ_LABEL,
+  CASHAPP_FEE_NOTE,
+  cashAppDriverSteps,
+  cashAppFeeFaqHref,
 } from "./walkthrough.ts";
 
-describe("Cash App walkthrough frame advance", () => {
-  const length = CASHAPP_WALKTHROUGH.length;
+describe("Cash App Driver.js walkthrough", () => {
+  it("maps each educational frame to an element-less popover step", () => {
+    const steps = cashAppDriverSteps();
+    assert.equal(steps.length, 5);
+    assert.equal(steps.length, CASHAPP_WALKTHROUGH.length);
+    assert.equal(steps.length, CASHAPP_STEPS_LIST.length);
 
-  it("loops forward through every step and wraps to the first", () => {
-    assert.equal(length, 5);
-    assert.equal(CASHAPP_WALKTHROUGH_FRAME_MS, 1600);
-
-    const seen: string[] = [];
-    let index = 0;
-    for (let tick = 0; tick < length; tick++) {
-      seen.push(CASHAPP_WALKTHROUGH[index]?.id ?? "");
-      index = stepWalkthroughIndex(index, 1, length);
+    for (const [index, step] of steps.entries()) {
+      const frame = CASHAPP_WALKTHROUGH[index];
+      assert.equal("element" in step, false);
+      assert.equal(step.popover.title, frame?.title);
+      assert.equal(step.popover.description, frame?.body);
+      assert.equal(step.popover.popoverClass, CASHAPP_DRIVER_POPOVER_CLASS);
     }
-    assert.deepEqual(
-      seen,
-      CASHAPP_WALKTHROUGH.map((frame) => frame.id),
-    );
-    assert.equal(index, 0);
-    assert.equal(stepWalkthroughIndex(length - 1, 1, length), 0);
+
+    assert.match(steps[3]?.popover.description ?? "", /extra/i);
+    assert.match(steps[4]?.popover.description ?? "", /invoice/i);
   });
 
-  it("steps backward from the first frame to the last", () => {
-    assert.equal(stepWalkthroughIndex(0, -1, length), length - 1);
-    assert.equal(stepWalkthroughIndex(2, -1, length), 1);
-  });
-
-  it("stays usable when length is empty", () => {
-    assert.equal(stepWalkthroughIndex(3, 1, 0), 0);
-    assert.equal(stepWalkthroughIndex(0, -1, 0), 0);
+  it("keeps the fee note and FAQ fees link", () => {
+    assert.equal(FAQ_PATH, "/faq");
+    assert.equal(FAQ_FEES_ID, "faq-fees");
+    assert.equal(cashAppFeeFaqHref(), `${FAQ_PATH}#${FAQ_FEES_ID}`);
+    assert.match(CASHAPP_FEE_NOTE, /fees vary/i);
+    assert.match(CASHAPP_FEE_FAQ_LABEL, /FAQ/i);
+    assert.match(CASHAPP_FEE_FAQ_LABEL, /fees/i);
   });
 });
