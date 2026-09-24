@@ -152,6 +152,10 @@ function Login() {
         <Link to="/signup" className="text-accent underline-offset-4 hover:underline">
           Request membership
         </Link>
+        {" · "}
+        <Link to="/faq" className="text-accent underline-offset-4 hover:underline">
+          Help
+        </Link>
       </p>
     </main>
   );

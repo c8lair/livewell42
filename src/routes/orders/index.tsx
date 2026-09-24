@@ -52,6 +52,9 @@ function OrdersPage() {
           <Link to="/" className="text-muted hover:text-fg">
             Shop
           </Link>
+          <Link to="/faq" className="text-muted hover:text-fg">
+            Help
+          </Link>
           <UserButton />
         </div>
       </header>

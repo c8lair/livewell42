@@ -4,6 +4,7 @@ import QRCode from "qrcode";
 import { getBtcPayment, refreshBtcQuote, type BtcPaymentView } from "@/lib/btc/payment";
 import { cents } from "@/lib/money";
 import { Button } from "@/components/ui/button";
+import { BtcCashAppHelp } from "@/components/shop/cashapp-btc-explainer";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/pay/btc/$token")({
@@ -172,7 +173,10 @@ function BtcPayPage() {
   return (
     <main className="mx-auto max-w-lg px-5 pb-20 pt-10">
       <p className="text-xs tracking-wide text-faint uppercase">Livewell42</p>
-      <h1 className="mt-2 font-display text-3xl">Pay with Bitcoin</h1>
+      <div className="mt-2 flex items-center gap-2">
+        <h1 className="font-display text-3xl">Pay with Bitcoin</h1>
+        <BtcCashAppHelp />
+      </div>
       <p className="mt-2 text-sm text-muted">
         Order {view.orderNumber}
       </p>

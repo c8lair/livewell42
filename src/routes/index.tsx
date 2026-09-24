@@ -16,6 +16,7 @@ import { cents, shippingCents } from "@/lib/money";
 import { LOWER_48 } from "@/lib/us-states";
 import { Button } from "@/components/ui/button";
 import { CheckRow, Input, Label, Select } from "@/components/ui/field";
+import { BtcPayOptionRow } from "@/components/shop/cashapp-btc-explainer";
 import { Minus, Plus, FileText } from "lucide-react";
 import { toast } from "sonner";
 
@@ -54,6 +55,11 @@ function Gate() {
           Request membership
         </Link>
       </div>
+      <p className="mt-8 text-sm text-muted">
+        <Link to="/faq" className="text-accent underline-offset-4 hover:underline">
+          Help &amp; FAQ
+        </Link>
+      </p>
     </main>
   );
 }
@@ -140,6 +146,9 @@ function MemberApp() {
           <p className="font-display text-xl tracking-tight">{settings.storeName}</p>
         </div>
         <div className="flex items-center gap-3 text-sm">
+          <Link to="/faq" className="text-muted hover:text-fg">
+            Help
+          </Link>
           <Link to="/orders" className="text-muted hover:text-fg">
             Orders
           </Link>
@@ -294,22 +303,11 @@ function Paywall({
           </p>
         </button>
         {btcOn ? (
-          <button
-            type="button"
-            onClick={() => setRail("btc")}
-            className={`w-full rounded-md border px-3 py-3 text-left text-sm ${
-              effectiveRail === "btc"
-                ? "border-accent bg-raised text-fg"
-                : "border-border text-muted hover:bg-raised/40"
-            }`}
-          >
-            <span className="font-medium text-fg">Pay with Bitcoin</span>
-            {effectiveRail === "btc" ? (
-              <p className="mt-1 text-xs leading-relaxed text-faint">
-                You will get a 15-minute mainnet quote. Membership unlocks after 1 confirmation.
-              </p>
-            ) : null}
-          </button>
+          <BtcPayOptionRow
+            selected={effectiveRail === "btc"}
+            onSelect={() => setRail("btc")}
+            description="You will get a 15-minute mainnet quote. Membership unlocks after 1 confirmation."
+          />
         ) : null}
       </div>
       <Button
@@ -570,21 +568,11 @@ function Shop({
               </button>
 
               {btcOn ? (
-                <button
-                  type="button"
-                  onClick={() => setRail("btc")}
-                  className={`w-full rounded-md border px-3 py-3 text-left text-sm ${
-                    effectiveRail === "btc" ? "border-accent bg-raised text-fg" : "border-border text-muted hover:bg-raised/40"
-                  }`}
-                >
-                  <span className="font-medium text-fg">Pay with Bitcoin</span>
-                  {effectiveRail === "btc" ? (
-                    <p className="mt-1 text-xs leading-relaxed text-faint">
-                      You will get a 15-minute Bitcoin quote with a QR code. Payment confirms
-                      after 1 on-chain confirmation.
-                    </p>
-                  ) : null}
-                </button>
+                <BtcPayOptionRow
+                  selected={effectiveRail === "btc"}
+                  onSelect={() => setRail("btc")}
+                  description="You will get a 15-minute Bitcoin quote with a QR code. Payment confirms after 1 on-chain confirmation. Cash App works."
+                />
               ) : settings.btcEnabled && due > 0 && due < btcMin ? (
                 <p className="text-xs text-faint">
                   Bitcoin available for orders of {cents(btcMin)} or more.
