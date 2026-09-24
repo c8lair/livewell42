@@ -193,6 +193,7 @@
   color: var(--color-muted);
   line-height: 1.45;
   text-align: left;
+  list-style: decimal;
 }
 
 .lw-cashapp-driver__steps li[data-current] {
