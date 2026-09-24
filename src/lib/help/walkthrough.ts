@@ -2,8 +2,8 @@
  * Driver.js mapping for the Cash App Bitcoin explainer.
  *
  * Steps are element-less (centered popovers) on purpose: this tour teaches
- * Cash App, an external app. We do not spotlight Livewell42 shop DOM or invent
- * a fake Cash App UI in the store.
+ * Cash App, an external app. We do not spotlight Livewell42 shop DOM. Each
+ * step injects a generic CSS phone illustration (not screenshots or logos).
  */
 
 import {

@@ -2,12 +2,8 @@ import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "re
 import { useNavigate } from "@tanstack/react-router";
 import { driver, type Driver, type PopoverDOM } from "driver.js";
 import { cn } from "@/lib/cn";
-import {
-  CASHAPP_STEPS_LIST,
-  CASHAPP_WALKTHROUGH,
-  FAQ_FEES_ID,
-  FAQ_PATH,
-} from "@/lib/help/content";
+import { FAQ_FEES_ID, FAQ_PATH } from "@/lib/help/content";
+import { createCashAppPhoneScreen } from "@/lib/help/phone-screen";
 import {
   CASHAPP_DRIVER_POPOVER_CLASS,
   CASHAPP_FEE_FAQ_LABEL,
@@ -37,6 +33,7 @@ function decorateCashAppPopover(
   popover: PopoverDOM,
   index: number,
   onFeeClick: (event: Event) => void,
+  reducedMotion: boolean,
 ) {
   const wrapper = popover.wrapper;
   wrapper.setAttribute("aria-modal", "true");
@@ -51,16 +48,10 @@ function decorateCashAppPopover(
     popover.title.before(kicker);
   }
 
-  const frame = CASHAPP_WALKTHROUGH[index];
-  let icon = wrapper.querySelector<HTMLElement>("[data-lw-cashapp-icon]");
-  if (!icon) {
-    icon = document.createElement("div");
-    icon.dataset.lwCashappIcon = "";
-    icon.setAttribute("aria-hidden", "true");
-    popover.title.before(icon);
-  }
-  icon.className = `lw-cashapp-driver__icon lw-cashapp-driver__icon--${frame?.icon ?? "cash"}`;
-  icon.textContent = frame?.iconLabel ?? "";
+  wrapper.querySelector("[data-lw-cashapp-phone]")?.remove();
+  const phone = createCashAppPhoneScreen(document, index, reducedMotion);
+  phone.setAttribute("aria-hidden", "true");
+  popover.title.before(phone);
 
   let fee = wrapper.querySelector<HTMLElement>("[data-lw-cashapp-fee]");
   if (!fee) {
@@ -76,24 +67,6 @@ function decorateCashAppPopover(
     fee.append(copy, link);
     popover.description.after(fee);
   }
-
-  let recap = wrapper.querySelector<HTMLOListElement>("[data-lw-cashapp-steps]");
-  if (!recap) {
-    recap = document.createElement("ol");
-    recap.dataset.lwCashappSteps = "";
-    recap.className = "lw-cashapp-driver__steps";
-    recap.setAttribute("aria-label", "Cash App Bitcoin steps");
-    for (const step of CASHAPP_STEPS_LIST) {
-      const item = document.createElement("li");
-      item.textContent = step;
-      recap.append(item);
-    }
-    fee.after(recap);
-  }
-  recap.querySelectorAll("li").forEach((item, itemIndex) => {
-    if (itemIndex === index) item.setAttribute("data-current", "");
-    else item.removeAttribute("data-current");
-  });
 }
 
 export function CashAppBtcExplainer({
@@ -110,8 +83,9 @@ export function CashAppBtcExplainer({
     if (!open) return;
 
     let ignoreDestroyed = false;
+    const reducedMotion = prefersReducedMotion();
     const instance = driver({
-      animate: !prefersReducedMotion(),
+      animate: !reducedMotion,
       overlayColor: "#000000",
       overlayOpacity: 0.7,
       allowClose: true,
@@ -126,11 +100,16 @@ export function CashAppBtcExplainer({
       popoverClass: CASHAPP_DRIVER_POPOVER_CLASS,
       steps: cashAppDriverSteps(),
       onPopoverRender: (popover, { index }) => {
-        decorateCashAppPopover(popover, index ?? 0, (event) => {
-          event.preventDefault();
-          instance.destroy();
-          void navigate({ to: FAQ_PATH, hash: FAQ_FEES_ID });
-        });
+        decorateCashAppPopover(
+          popover,
+          index ?? 0,
+          (event) => {
+            event.preventDefault();
+            instance.destroy();
+            void navigate({ to: FAQ_PATH, hash: FAQ_FEES_ID });
+          },
+          reducedMotion,
+        );
       },
       onDestroyed: () => {
         if (driverRef.current === instance) driverRef.current = null;
