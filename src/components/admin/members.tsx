@@ -1,6 +1,6 @@
 import { cents } from "@/lib/money";
 import { Badge } from "@/components/ui/badge";
-import type { AdminData } from "./";
+import type { AdminData } from "./types";
 
 export function MembersBlock({ members }: { members: AdminData["members"] }) {
   return (

@@ -10,6 +10,7 @@ import { OverviewBlock } from "@/components/admin/overview";
 import { ProductsBlock } from "@/components/admin/products";
 import { OrdersBlock } from "@/components/admin/orders";
 import { BitcoinOrdersBlock } from "@/components/admin/bitcoin";
+import { MembersBlock } from "@/components/admin/members";
 import { SettingsBlock } from "@/components/admin/settings";
 import { MailBlock } from "@/components/admin/mail";
 
@@ -20,6 +21,7 @@ const TABS = [
   { id: "products", label: "Products" },
   { id: "orders", label: "Orders" },
   { id: "bitcoin", label: "Bitcoin" },
+  { id: "members", label: "Members" },
   { id: "settings", label: "Settings" },
   { id: "mail", label: "Mail queue" },
 ] as const;
@@ -166,6 +168,7 @@ function AdminPage() {
               onSave={() => void refresh()}
             />
           ) : null}
+          {tab === "members" ? <MembersBlock members={data.members} /> : null}
           {tab === "settings" ? (
             <SettingsBlock
               settings={data.settings}
