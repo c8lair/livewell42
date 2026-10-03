@@ -1,12 +1,15 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { AuthProvider } from "@/lib/auth/provider";
+import { CloudflareWebAnalyticsBeacon } from "@/components/cloudflare-web-analytics-beacon";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
+import { getCloudflareWebAnalyticsBeaconToken } from "@/lib/cloudflare-web-analytics-api";
 import { Toaster } from "sonner";
 import "../styles.css";
 
 const APP_NAME = "Livewell42";
 
 export const Route = createRootRoute({
+  loader: () => getCloudflareWebAnalyticsBeaconToken(),
   head: () => ({
     meta: [
       { charSet: "utf-8" },
@@ -28,7 +31,12 @@ export const Route = createRootRoute({
       },
     ],
   }),
-  component: () => (
+  component: RootDocument,
+});
+
+function RootDocument() {
+  const { token } = Route.useLoaderData();
+  return (
     <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
@@ -50,7 +58,8 @@ export const Route = createRootRoute({
           />
         </AuthProvider>
         <Scripts />
+        <CloudflareWebAnalyticsBeacon token={token} />
       </body>
     </html>
-  ),
-});
+  );
+}

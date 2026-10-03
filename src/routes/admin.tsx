@@ -13,6 +13,7 @@ import { BitcoinOrdersBlock } from "@/components/admin/bitcoin";
 import { MembersBlock } from "@/components/admin/members";
 import { SettingsBlock } from "@/components/admin/settings";
 import { MailBlock } from "@/components/admin/mail";
+import { AnalyticsBlock } from "@/components/admin/analytics";
 
 export const Route = createFileRoute("/admin")({ component: AdminPage });
 
@@ -24,6 +25,7 @@ const TABS = [
   { id: "members", label: "Members" },
   { id: "settings", label: "Settings" },
   { id: "mail", label: "Mail queue" },
+  { id: "analytics", label: "Analytics" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -136,10 +138,7 @@ function AdminPage() {
             ) : null}
           </button>
         ))}
-        <Link
-          to="/"
-          className="mt-6 block px-3 text-xs text-muted hover:text-fg"
-        >
+        <Link to="/" className="mt-6 block px-3 text-xs text-muted hover:text-fg">
           ← Shop
         </Link>
       </nav>
@@ -178,6 +177,7 @@ function AdminPage() {
             />
           ) : null}
           {tab === "mail" ? <MailBlock mail={data.mail} /> : null}
+          {tab === "analytics" ? <AnalyticsBlock /> : null}
         </main>
       </div>
     </div>
